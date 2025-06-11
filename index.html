@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ตรวจสอบเรทไฟฟ้า</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <script src="./holiday_results/holiday_2022.js"></script>
+    <script src="./holiday_results/holiday_2023.js"></script>
+    <script src="./holiday_results/holiday_2024.js"></script>
+    <script src="./holiday_results/holiday_2025.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+        }
+        input[type="file"] {
+            display: block;
+            margin: 20px auto;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            width: fit-content;
+        }
+        .multiplier-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .multiplier-controls input[type="number"] {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 150px;
+            text-align: center;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #output {
+            margin-top: 20px;
+            overflow-x: auto; /* เพื่อให้ตารางเลื่อนได้ถ้าข้อมูลเยอะ */
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin-top: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        }
+        th, td {
+            border: 1px solid #e0e0e0;
+            padding: 12px;
+            text-align: center;
+            white-space: nowrap; /* ป้องกันการขึ้นบรรทัดใหม่ในเซลล์ตาราง */
+        }
+        th {
+            background-color: #eaf1f7;
+            color: #555;
+            font-weight: bold;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .peak { background-color: #ffe0e0; } /* สีแดงอ่อน */
+        .off-peak { background-color: #e0ffe0; } /* สีเขียวอ่อน */
+        .holiday { background-color: #e0e0ff; } /* สีน้ำเงินอ่อน */
+
+        /* Style for the summary box */
+        .summary-box {
+            margin-bottom: 20px;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .summary-box h3 {
+            margin-top: 0;
+            color: #2c3e50;
+        }
+        .summary-box p {
+            margin: 5px 0;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>ตรวจสอบเรทไฟฟ้าจากไฟล์ Excel</h1>
+        <input type="file" id="excelFile" accept=".xlsx, .xls">
+        <button onclick="process()">วิเคราะห์</button>
+
+        <div class="multiplier-controls">
+            <label for="multiplierInput">ตัวคูณ (เลขจำนวนเต็ม):</label>
+            <input type="number" id="multiplierInput" value="1000" placeholder="เช่น 1000">
+            <button onclick="applyMultiplier()">ใช้ตัวคูณ</button>
+        </div>
+
+        <div id="output"></div>
+    </div>
+
+    <script>
+        const holidays = new Set(); // เก็บวันหยุดในรูปแบบ 'YYYY-MM-DD' (ค.ศ.)
+        let globalResults = []; // เก็บผลลัพธ์ดิบทั้งหมด เพื่อใช้ในการคำนวณใหม่
+        let isProcessed = false; // Flag เพื่อตรวจสอบว่าไฟล์ Excel ได้ถูกประมวลผลแล้วหรือยัง
+
+        // --- ฟังก์ชันสำหรับโหลดและประมวลผลวันหยุดจากไฟล์ JS ---
+        function collectHolidays() {
+            holidays.clear(); // ล้างข้อมูลวันหยุดเก่า (ถ้ามี)
+            const allHolidayVars = [
+                typeof holiday_2022 !== 'undefined' ? holiday_2022 : null,
+                typeof holiday_2023 !== 'undefined' ? holiday_2023 : null,
+                typeof holiday_2024 !== 'undefined' ? holiday_2024 : null,
+                typeof holiday_2025 !== 'undefined' ? holiday_2025 : null
+            ];
+
+            allHolidayVars.forEach(data => {
+                if (!data || !data.data) return;
+                data.data.forEach(entry => {
+                    if (entry.tou === 1 && entry.holiday) {
+                        const [d, m, byear] = entry.holiday.split('/');
+                        const year = parseInt(byear) - 543;
+                        const isoDate = `${year}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+                        holidays.add(isoDate);
+                    }
+                });
+            });
+            console.log("วันหยุด (tou=1) ที่รวบรวมได้:", Array.from(holidays));
+        }
+
+        // --- ฟังก์ชันตรวจสอบว่าเป็นวันหยุดนักขัตฤกษ์ที่มี tou=1 หรือไม่ ---
+        function isHoliday(date) {
+            const iso = date.toISOString().split('T')[0];
+            return holidays.has(iso);
+        }
+
+        // --- ฟังก์ชันกำหนดเรทการใช้ไฟ (Peak, Off-peak, Holiday) ---
+        function getRate(date) {
+            const hour = date.getHours();
+            const min = date.getMinutes();
+            const day = date.getDay();
+
+            const isMidnight = (hour === 0 && min === 0);
+            const prevDayDate = new Date(date);
+            prevDayDate.setDate(date.getDate() - 1);
+            const prevDay = prevDayDate.getDay();
+
+            if (isMidnight && (prevDay === 0 || prevDay === 6) && !isHoliday(prevDayDate)) {
+                return 'Holiday';
+            }
+            if (isMidnight && day === 6) {
+                return 'Off-peak';
+            }
+            if (isHoliday(date) && !(hour === 0 && min === 0)) {
+                return 'Off-peak';
+            }
+            if (day === 0 || day === 6) {
+                return 'Holiday';
+            }
+
+            const totalMin = hour * 60 + min;
+            const peakStart = 9 * 60 + 15;
+            const peakEnd = 22 * 60;
+
+            if (totalMin >= peakStart && totalMin <= peakEnd) {
+                return 'Peak';
+            } else {
+                return 'Off-peak';
+            }
+        }
+
+        // --- ฟังก์ชันสำหรับเรนเดอร์ผลลัพธ์ (สรุปและตาราง) ---
+        function renderResults(multiplier = 1000) {
+            if (!isProcessed) {
+                alert("กรุณาประมวลผลไฟล์ Excel ก่อนครับ/ค่ะ");
+                return;
+            }
+
+            let totalPeakUnits = 0;
+            let totalOffPeakUnits = 0;
+            let totalHolidayUnits = 0;
+            let totalVarhUnits = 0;
+
+            let tableRowsHtml = '';
+
+            globalResults.forEach(r => {
+                const wh = parseFloat(r.originalAaValue) || 0;
+                const varh = parseFloat(r.originalAiValue) || 0;
+
+                // คำนวณค่าใหม่ตามตัวคูณ
+                const currentWh = (wh * multiplier) / 1000;
+                const currentVarh = (varh * multiplier) / 1000;
+                
+                // ใช้ date object ที่ปัดแล้วจาก original data (r.dateObject)
+                const rate = getRate(r.dateObject); 
+
+                if (rate === 'Peak') {
+                    totalPeakUnits += currentWh;
+                } else if (rate === 'Off-peak') {
+                    totalOffPeakUnits += currentWh;
+                } else if (rate === 'Holiday') {
+                    totalHolidayUnits += currentWh;
+                }
+                totalVarhUnits += currentVarh;
+
+                const cls = rate.toLowerCase().replace('-', '');
+                tableRowsHtml += `<tr class="${cls}">
+                    <td>${r.datetime}</td>
+                    <td>${rate}</td>
+                    <td>${currentWh.toFixed(3)}</td> <td>${currentVarh.toFixed(3)}</td> </tr>`;
+            });
+
+            const grandTotalUnits = totalPeakUnits + totalOffPeakUnits + totalHolidayUnits;
+
+            // *** สร้าง HTML สำหรับสรุปหน่วยรวม (แสดงทศนิยม 3 ตำแหน่ง พร้อมผลรวม VARh) ***
+            let summaryHtml = `
+                <div class="summary-box">
+                    <h3>สรุปหน่วยรวมทั้งหมด</h3>
+                    <p>หน่วยรวม Peak: <strong>${totalPeakUnits.toFixed(3)}</strong></p>
+                    <p>หน่วยรวม Off-peak: <strong>${totalOffPeakUnits.toFixed(3)}</strong></p>
+                    <p>หน่วยรวม Holiday: <strong>${totalHolidayUnits.toFixed(3)}</strong></p>
+                    <p><strong>หน่วยรวมทั้งหมด (Wh): ${grandTotalUnits.toFixed(3)}</strong></p>
+                    <p><strong>หน่วยรวมทั้งหมด (VARh): ${totalVarhUnits.toFixed(3)}</strong></p>
+                </div>
+            `;
+
+            // *** สร้าง HTML สำหรับตารางผลลัพธ์ ***
+            let tableHtml = `<table><tr><th>วันเวลา</th><th>เรท</th><th>Wh</th><th>VARh</th></tr>${tableRowsHtml}</table>`;
+
+            document.getElementById('output').innerHTML = summaryHtml + tableHtml;
+        }
+
+
+        // --- ฟังก์ชันหลักสำหรับประมวลผลไฟล์ Excel ที่ผู้ใช้อัปโหลด ---
+        async function process() {
+            collectHolidays();
+
+            const file = document.getElementById('excelFile').files[0];
+            if (!file) {
+                alert("กรุณาเลือกไฟล์ Excel ก่อนครับ/ค่ะ");
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const data = new Uint8Array(e.target.result);
+                const wb = XLSX.read(data, { type: 'array', cellDates: true });
+                const sheet = wb.Sheets[wb.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+                globalResults = []; // ล้างข้อมูลเก่า
+                isProcessed = false; // ตั้งค่าเป็น false ก่อนเริ่มประมวลผล
+
+                for (let i = 3; i < rows.length; i++) {
+                    const rawDate = rows[i][2];
+                    const aaValue = rows[i][26];
+                    const aiValue = rows[i][34];
+
+                    if (!rawDate) continue;
+
+                    let date;
+                    if (rawDate instanceof Date) {
+                        date = rawDate;
+                    } else if (typeof rawDate === 'string') {
+                        const match = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2}):(\d{2})/);
+                        if (match) {
+                            const [, day, month, year, hour, minute, second] = match;
+                            const isoString = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}T${hour.padStart(2, '0')}:${minute.padStart(2, '0')}:${second.padStart(2, '0')}`;
+                            date = new Date(isoString);
+                        } else {
+                            date = new Date(rawDate);
+                        }
+                    } else {
+                        console.warn(`Skipping unexpected data type at row ${i + 1}, column C: ${rawDate}`);
+                        continue;
+                    }
+
+                    if (isNaN(date.getTime())) {
+                        console.warn(`Skipping invalid date after parsing at row ${i + 1}, column C: ${rawDate}`);
+                        continue;
+                    }
+
+                    // สร้าง Date object แยกต่างหากสำหรับ getRate เพื่อไม่ให้กระทบกับ original date object
+                    const dateForRate = new Date(date); 
+                    dateForRate.setSeconds(0);
+                    dateForRate.setMilliseconds(0);
+                    const currentMinutes = dateForRate.getMinutes();
+                    const roundedMinutes = Math.round(currentMinutes / 15) * 15;
+                    dateForRate.setMinutes(roundedMinutes); 
+
+                    const formattedDatetime = `${dateForRate.getFullYear()}/${(dateForRate.getMonth() + 1).toString().padStart(2, '0')}/${dateForRate.getDate().toString().padStart(2, '0')} ${dateForRate.getHours().toString().padStart(2, '0')}:${dateForRate.getMinutes().toString().padStart(2, '0')}:${dateForRate.getSeconds().toString().padStart(2, '0')}`;
+
+                    globalResults.push({
+                        datetime: formattedDatetime,
+                        originalAaValue: parseFloat(aaValue) || 0, // เก็บค่า Wh ดั้งเดิม
+                        originalAiValue: parseFloat(aiValue) || 0, // เก็บค่า VARh ดั้งเดิม
+                        dateObject: dateForRate // เก็บ Date object ที่ปัดแล้วสำหรับใช้ใน renderResults
+                    });
+                }
+                isProcessed = true;
+                // เรนเดอร์ผลลัพธ์ครั้งแรกด้วยตัวคูณเริ่มต้น (หรือ 1000 ตามค่า default ใน input)
+                applyMultiplier(); 
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- ฟังก์ชันสำหรับใช้ตัวคูณที่ผู้ใช้กรอก ---
+        function applyMultiplier() {
+            const multiplierInput = document.getElementById('multiplierInput');
+            const multiplier = parseFloat(multiplierInput.value);
+
+            if (isNaN(multiplier)) {
+                alert("กรุณากรอกตัวเลขที่ถูกต้องในช่อง 'ตัวคูณ'");
+                multiplierInput.focus();
+                return;
+            }
+            
+            if (!isProcessed) {
+                alert("กรุณาเลือกไฟล์ Excel และกด 'วิเคราะห์' ก่อนที่จะใช้ตัวคูณ");
+                return;
+            }
+
+            renderResults(multiplier); // เรียกใช้ renderResults พร้อมตัวคูณใหม่
+        }
+    </script>
+</body>
+</html>
