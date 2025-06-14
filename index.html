@@ -184,41 +184,43 @@
             });
         }
 
-        function isHoliday(dateInBKKTime) {
-            const iso = dateInBKKTime.toISOString().split('T')[0];
+        function isHoliday(date) {
+            // date เป็น JS Date ที่อยู่ใน local time (Asia/Bangkok)
+            // ถ้าเวลา 00:00 ถึง 00:14 ให้ถือเป็นของวันก่อนหน้า
+            let checkDate = new Date(date);
+            let hour = checkDate.getHours();
+            let min = checkDate.getMinutes();
+
+            if (hour === 0 && min < 15) {
+                checkDate.setDate(checkDate.getDate() - 1);
+            }
+            // แปลงเป็น YYYY-MM-DD
+            const iso = checkDate.getFullYear() + '-' +
+                String(checkDate.getMonth() + 1).padStart(2, '0') + '-' +
+                String(checkDate.getDate()).padStart(2, '0');
             return holidays.has(iso);
         }
 
         function getRate(date) {
-            const hour = date.getHours();
-            const min = date.getMinutes();
-            const day = date.getDay(); // 0 = Sunday, 6 = Saturday
+            let checkDate = new Date(date);
+            let hour = checkDate.getHours();
+            let min = checkDate.getMinutes();
 
-            const currentDayDateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate());
-            const prevDayDateOnly = new Date(date.getFullYear(), date.getMonth(), date.getDate() - 1);
+            // ถ้าเวลา 00:00 ถึง 00:14 ให้ถือเป็นของวันก่อนหน้า
+            if (hour === 0 && min < 15) {
+                checkDate.setDate(checkDate.getDate() - 1);
+                hour = 0;
+                min = 0;
+            }
 
-            const todayIsHolidayFlag = isHoliday(currentDayDateOnly);
-            const prevDayIsHolidayFlag = isHoliday(prevDayDateOnly);
-
-            // ✅ เวลา 00:00 ของวันถัดจากวันหยุด ยังเป็น Holiday
-            if (hour === 0 && min === 0 && prevDayIsHolidayFlag && !todayIsHolidayFlag) {
+            const day = checkDate.getDay(); // 0=อาทิตย์, 6=เสาร์
+            if (isHoliday(date) || day === 0 || day === 6) {
                 return 'Holiday';
             }
 
-            // ✅ ถ้าวันนี้เป็นวันหยุด → Holiday เต็มวัน
-            if (todayIsHolidayFlag) {
-                return 'Holiday';
-            }
-
-            // ✅ เสาร์-อาทิตย์ → Holiday เต็มวัน (ถ้าไม่ตรงวันหยุดราชการก็ยังถือเป็น Holiday)
-            if (day === 0 || day === 6) {
-                return 'Holiday';
-            }
-
-            // 🕘 เวลาพีค 09:15 - 22:00 น.
             const totalMin = hour * 60 + min;
-            const peakStart = 9 * 60 + 15;
-            const peakEnd = 22 * 60;
+            const peakStart = 9 * 60 + 15; // 09:15
+            const peakEnd = 22 * 60;       // 22:00
 
             if (totalMin >= peakStart && totalMin <= peakEnd) {
                 return 'Peak';
