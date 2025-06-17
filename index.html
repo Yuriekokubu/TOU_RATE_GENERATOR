@@ -71,7 +71,7 @@
     <script>
         const holidays = new Set();
         let globalResults = [];
-        let isProcessed = false;
+        let isProcessed = false; // สถานะการประมวลผลไฟล์
         let meterNumber = '';
         let multiplier = 0;
 
@@ -108,6 +108,8 @@
             const files = dt.files;
 
             if (files.length > 0) {
+                // รีเซ็ต isProcessed เมื่อมีการลากไฟล์ใหม่
+                isProcessed = false;
                 excelFileInput.files = files;
                 process();
             }
@@ -119,43 +121,84 @@
 
         excelFileInput.addEventListener('change', () => {
             if (excelFileInput.files.length > 0) {
+                // รีเซ็ต isProcessed เมื่อมีการเลือกไฟล์ใหม่
+                isProcessed = false;
                 process();
             }
         });
 
-        // Helper function to convert a UTC Date object's components to BKK time components
-        // Returns { hour, minute, day, month, year, dayOfWeek } in BKK context
+        // Helper function to extract BKK time components from a UTC-adjusted Date object.
+        // It assumes the input utcDateObj has already been adjusted to reflect BKK time
+        // in its UTC components.
         function getBKKTimeComponents(utcDateObj) {
-            const utcHours = utcDateObj.getUTCHours();
-            const utcMinutes = utcDateObj.getUTCMinutes();
-            const utcSeconds = utcDateObj.getUTCSeconds();
-            const utcDay = utcDateObj.getUTCDate();
-            const utcMonth = utcDateObj.getUTCMonth();
-            const utcYear = utcDateObj.getUTCFullYear();
-
-            // Create a temporary Date object at the exact UTC time, then shift it to BKK
-            const tempDate = new Date(Date.UTC(utcYear, utcMonth, utcDay, utcHours, utcMinutes, utcSeconds, 0));
-            tempDate.setUTCHours(tempDate.getUTCHours() + 7); // Shift to BKK (GMT+7)
-
             return {
-                hour: tempDate.getUTCHours(), // Now these are BKK hours
-                minute: tempDate.getUTCMinutes(),
-                second: tempDate.getUTCSeconds(),
-                day: tempDate.getUTCDate(),
-                month: tempDate.getUTCMonth(),
-                year: tempDate.getUTCFullYear(),
-                dayOfWeek: tempDate.getUTCDay() // BKK day of week (0=Sun, 6=Sat)
+                hour: utcDateObj.getUTCHours(),
+                minute: utcDateObj.getUTCMinutes(),
+                second: utcDateObj.getUTCSeconds(),
+                day: utcDateObj.getUTCDate(),
+                month: utcDateObj.getUTCMonth(), // 0-indexed
+                year: utcDateObj.getUTCFullYear(),
+                dayOfWeek: utcDateObj.getUTCDay() // BKK day of week (0=Sun, 6=Sat)
             };
         }
 
-        // Helper function to get a Date object representing midnight of a calendar day in BKK timezone
-        // The returned Date object's UTC components will be adjusted to represent BKK midnight.
-        function getBKKCalendarDateFromUTC(utcDateObj) {
-            const bkkComponents = getBKKTimeComponents(utcDateObj);
-            const bkkMidnight = new Date(Date.UTC(bkkComponents.year, bkkComponents.month, bkkComponents.day, 0, 0, 0));
-            bkkMidnight.setUTCHours(bkkMidnight.getUTCHours() + 7); // Adjust to GMT+7
-            return bkkMidnight;
+        // Helper function to get a Date object representing midnight of a calendar day in BKK timezone.
+        // The returned Date object's UTC components will *directly* represent BKK midnight.
+        function getBKKMidnightUTCAdjusted(year, monthIndex, day) { // monthIndex is 0-indexed
+            // Create a Date object where its UTC components directly represent BKK midnight for the given day.
+            const d = new Date(Date.UTC(year, monthIndex, day, 0, 0, 0));
+            return d;
         }
+
+        // ******** ฟังก์ชันสำหรับแปลง Excel Date เป็น BKK Time ในรูปแบบ UTC-adjusted (จุดเดียวที่ปรับ) ********
+        function convertExcelDateToBKKUTCAdjusted(rawDate) {
+            let dateObj;
+            const bkkOffsetMs = 7 * 60 * 60 * 1000; // 7 hours in milliseconds
+
+            if (rawDate instanceof Date) {
+                // หากเป็น Date object อยู่แล้ว (อาจมาจาก cellDates: true)
+                // Date object นี้จะถูกสร้างโดย XLSX library โดยใช้เวลาท้องถิ่นของระบบที่เปิดไฟล์
+                // เราต้องการให้ UTC components ของมันเป็น BKK Time
+                // จึงเพิ่ม offset ของ BKK (7 ชั่วโมง) ไปที่ timestamp ของมันโดยตรง
+                dateObj = new Date(rawDate.getTime() + bkkOffsetMs);
+            } else if (typeof rawDate === 'number') {
+                // หากเป็นตัวเลขจาก Excel (serial date)
+                const parsed = XLSX.SSF.parse_date_code(rawDate);
+                // XLSX.SSF.parse_date_code จะคืนค่าเป็น y, m, d, H, M, S ที่ "เป็นกลาง" (ไม่ได้บอกว่าเป็น UTC หรือ Local)
+                // เราจะถือว่าค่าเหล่านี้คือ BKK Time และสร้าง Date.UTC() โดยตรง
+                // ทำให้ UTC components ของ dateObj แทน BKK Time ทันที
+                dateObj = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, parsed.S));
+            } else if (typeof rawDate === 'string') {
+                // หากเป็น String
+                const match = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2}):(\d{2})|(\d{4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{2}):(\d{2})/);
+                if (match) {
+                    let year, month, day, hour, minute, second;
+                    if (match[1]) { // DD/MM/YYYY HH:mm:ss format
+                        [, day, month, year, hour, minute, second] = match;
+                        year = parseInt(year) > 2500 ? parseInt(year) - 543 : parseInt(year); // Convert Buddhist year to AD
+                    } else if (match[7]) { // YYYY-MM-DDTHH:mm:ss format
+                        [, , , , , , year, month, day, hour, minute, second] = match;
+                    }
+                    // ถือว่า string components เหล่านี้คือ BKK Time และสร้าง Date.UTC() โดยตรง
+                    dateObj = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second)));
+                } else {
+                    // กรณี string format อื่นๆ (อาจเป็น ISO 8601 ที่ไม่มี Z หรือ Time Zone offset)
+                    // ลองให้ Date constructor จัดการ ซึ่งมักจะตีความเป็น Local Time ของระบบ
+                    let tempDate = new Date(rawDate);
+                    if (!isNaN(tempDate.getTime())) { // ตรวจสอบว่า parse ได้จริง
+                        // เพิ่ม offset ของ BKK (7 ชั่วโมง) ไปที่ timestamp ของมันโดยตรง
+                        dateObj = new Date(tempDate.getTime() + bkkOffsetMs);
+                    } else {
+                        return null; // parse ไม่ได้
+                    }
+                }
+            } else {
+                return null; // ไม่ใช่รูปแบบที่รองรับ
+            }
+
+            return isNaN(dateObj.getTime()) ? null : dateObj;
+        }
+        // ******************************************************************************
 
         function collectHolidays() {
             holidays.clear();
@@ -172,11 +215,10 @@
                         const [d, m, byear] = entry.holiday.split('/');
                         const year = parseInt(byear) - 543;
 
-                        // Create a Date object representing the holiday at midnight in BKK timezone
-                        const bkkHolidayMidnight = new Date(Date.UTC(year, parseInt(m) - 1, parseInt(d), 0, 0, 0));
-                        bkkHolidayMidnight.setUTCHours(bkkHolidayMidnight.getUTCHours() + 7); // Adjust to GMT+7
+                        // Create a Date object representing the holiday at midnight in BKK timezone (UTC components match BKK)
+                        const bkkHolidayMidnight = getBKKMidnightUTCAdjusted(year, parseInt(m) - 1, parseInt(d));
 
-                        // Store its ISO string (which will correctly beYYYY-MM-DD for BKK date)
+                        // Store its ISO string (which will correctly be YYYY-MM-DD from UTC components matching BKK)
                         const isoDate = bkkHolidayMidnight.toISOString().split('T')[0];
                         holidays.add(isoDate);
                     }
@@ -185,42 +227,53 @@
         }
 
         function isHoliday(date) {
-            // date เป็น JS Date ที่อยู่ใน local time (Asia/Bangkok)
-            // ถ้าเวลา 00:00 ถึง 00:14 ให้ถือเป็นของวันก่อนหน้า
-            let checkDate = new Date(date);
-            let hour = checkDate.getHours();
-            let min = checkDate.getMinutes();
+            // date is a UTC-adjusted Date object (its UTC components reflect BKK time)
+            let checkDate = new Date(date.getTime()); // Create a copy to avoid modifying original
+
+            const bkkComponents = getBKKTimeComponents(checkDate); // Get BKK components from the UTC-adjusted date
+            let hour = bkkComponents.hour;
+            let min = bkkComponents.minute;
 
             if (hour === 0 && min < 15) {
-                checkDate.setDate(checkDate.getDate() - 1);
+                // If the BKK time is between 00:00 and 00:14,
+                // adjust the date backwards by one BKK day (by adjusting UTC components).
+                checkDate.setUTCHours(checkDate.getUTCHours() - 24);
             }
-            // แปลงเป็น YYYY-MM-DD
-            const iso = checkDate.getFullYear() + '-' +
-                String(checkDate.getMonth() + 1).padStart(2, '0') + '-' +
-                String(checkDate.getDate()).padStart(2, '0');
+
+            // Convert to YYYY-MM-DD for holiday set lookup
+            const finalBkkComponents = getBKKTimeComponents(checkDate);
+            const iso = finalBkkComponents.year + '-' +
+                String(finalBkkComponents.month + 1).padStart(2, '0') + '-' +
+                String(finalBkkComponents.day).padStart(2, '0');
             return holidays.has(iso);
         }
 
         function getRate(date) {
-            let checkDate = new Date(date);
-            let hour = checkDate.getHours();
-            let min = checkDate.getMinutes();
+            // date is a UTC-adjusted Date object (its UTC components reflect BKK time)
+            let checkDate = new Date(date.getTime()); // Create a copy to avoid modifying original
 
-            // ถ้าเวลา 00:00 ถึง 00:14 ให้ถือเป็นของวันก่อนหน้า
+            const bkkComponents = getBKKTimeComponents(checkDate); // Get BKK components from the UTC-adjusted date
+            let hour = bkkComponents.hour;
+            let min = bkkComponents.minute;
+
+            // If time is 00:00 to 00:14, consider it part of the previous day
             if (hour === 0 && min < 15) {
-                checkDate.setDate(checkDate.getDate() - 1);
-                hour = 0;
-                min = 0;
+                // Adjust the date backwards by one BKK day for rate calculation
+                checkDate.setUTCHours(checkDate.getUTCHours() - 24);
+                // Re-calculate hour/min from the adjusted date for rate logic
+                const adjustedBkkComponents = getBKKTimeComponents(checkDate);
+                hour = adjustedBkkComponents.hour;
+                min = adjustedBkkComponents.minute;
             }
 
-            const day = checkDate.getDay(); // 0=อาทิตย์, 6=เสาร์
+            const day = getBKKTimeComponents(checkDate).dayOfWeek; // Get BKK day of week (0=อาทิตย์, 6=เสาร์)
             if (isHoliday(date) || day === 0 || day === 6) {
                 return 'Holiday';
             }
 
             const totalMin = hour * 60 + min;
             const peakStart = 9 * 60 + 15; // 09:15
-            const peakEnd = 22 * 60;       // 22:00
+            const peakEnd = 22 * 60; // 22:00
 
             if (totalMin >= peakStart && totalMin <= peakEnd) {
                 return 'Peak';
@@ -229,34 +282,41 @@
             }
         }
 
-
-        // Helper function to get days in a month (1-indexed month)
+        // Helper function to get the number of days in a month
+        // month is 1-indexed (1=Jan, 12=Dec)
         function getDaysInMonth(year, month) {
-            return new Date(year, month, 0).getDate(); // month is 1-indexed for this constructor use case
+            // month + 1 as new Date(year, month, 0) gives last day of previous month for 0-indexed month
+            // So, new Date(year, month, 0) will give the last day of the 'month' parameter
+            return new Date(Date.UTC(year, month, 0)).getUTCDate();
         }
 
-        // Helper function to get the actual reading day of a given month (1-indexed) and year
-        function getReadingDay(year, month, arType) {
-            const daysInMonth = new Date(year, month, 0).getDate();
+
+        // Modified getReadingDay to calculate based on days in month
+        function getReadingDay(year, month, arType) { // month is 1-indexed here (1-12)
+            const numDaysInMonth = getDaysInMonth(year, month); // Get days for the given month
+
             if (arType === 'AR1') {
-                return daysInMonth - 10;
+                // If the month has 31 days -> 31 - 10 = 21
+                // If the month has 30 days -> 30 - 10 = 20
+                // If the month has 28 days (Feb) -> 28 - 10 = 18
+                // If the month has 29 days (Leap Feb) -> 29 - 10 = 19
+                return numDaysInMonth - 10;
             } else if (arType === 'AR6') {
-                return daysInMonth - 2;
+                // If the month has 31 days -> 31 - 2 = 29
+                // If the month has 30 days -> 30 - 2 = 28
+                // If the month has 28 days (Feb) -> 28 - 2 = 26
+                // If the month has 29 days (Leap Feb) -> 29 - 2 = 27
+                return numDaysInMonth - 2;
             } else if (arType === 'HA1') {
-                return 1;
+                return 1; // Fixed to 1st of the month
             }
+            console.error(`[getReadingDay] Unknown AR Type: ${arType}`);
             return -1; // Should not happen
         }
 
-        // Helper function to get a Date object at 00:00:00 in Bangkok Time, UTC-adjusted
-        function getBKKMidnightUTCAdjusted(year, monthIndex, day) { // monthIndex is 0-indexed
-            const d = new Date(Date.UTC(year, monthIndex, day, 0, 0, 0));
-            d.setUTCHours(d.getUTCHours() + 7); // Adjust to GMT+7 for BKK midnight
-            return d;
-        }
-
         function isInBillingPeriod(dateObject, arType, selectedMonth, selectedYear) {
-            // selectedMonth is 1-indexed (e.g., 1 for January, 2 for February)
+            // dateObject is `roundedDateObjectUTC`, which has its UTC components
+            // already adjusted to represent BKK time.
 
             let billingPeriodStartDate, billingPeriodEndDate;
 
@@ -268,29 +328,36 @@
                 prevReadingYear--;
             }
 
-            // Determine the reading day for the previous month
+            // Determine the reading day for the previous month based on its number of days
             const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
-            if (prevReadingDay === -1) return false;
+            if (prevReadingDay === -1) {
+                console.warn(`[isInBillingPeriod] Could not determine prevReadingDay for ${prevReadingYear}-${prevReadingMonth}`);
+                return false;
+            }
 
             // Calculate the start date of the billing period
-            // It's the previous month's reading date at 00:15:00 BKK
+            // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
             billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
             billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
 
-            // Determine the reading day for the *current* billing month
+            // Determine the reading day for the *current* billing month based on its number of days
             const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
-            if (currentReadingDay === -1) return false;
+            if (currentReadingDay === -1) {
+                console.warn(`[isInBillingPeriod] Could not determine currentReadingDay for ${selectedYear}-${selectedMonth}`);
+                return false;
+            }
 
             // Calculate the end date of the billing period
-            // It's the current month's reading date at 00:00:00 BKK (of the *next* day)
+            // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
+            // This ensures data up to 24:00:00 (which is 00:00:00 of the next day) of the reading day is included.
             billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay + 1); // monthIndex is 0-indexed
 
+            // LOG: Check calculated startDate and endDate.
+            // console.log(`[isInBillingPeriod] Comparing: Date: ${dateObject.toISOString()} vs Start: ${billingPeriodStartDate.toISOString()} End: ${billingPeriodEndDate.toISOString()}`);
 
-            // `dateObject` is `roundedDateObjectUTC` which is already UTC-adjusted to represent BKK time.
-            // So, we can directly compare its getTime() with the `billingPeriodStartDate` and `billingPeriodEndDate`
-            // which are also UTC-adjusted BKK times.
-            return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() < billingPeriodEndDate.getTime();
+            // CHANGE: Changed from < to <= to include the exact 00:00:00 of the next day.
+            return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() <= billingPeriodEndDate.getTime();
         }
 
         function sortTable(columnIndex) {
@@ -311,6 +378,12 @@
 
             updateDisplay(); // Re-render the detailed table after sorting
         }
+
+        function customRound(value, decimalPlaces) {
+            const factor = Math.pow(10, decimalPlaces);
+            return Math.round(value * factor) / factor;
+        }
+
 
         // Modified renderResults to accept selectedMonthYear and selectedArType
         function renderResults(unitType, selectedMonthYear, selectedArType) {
@@ -349,9 +422,23 @@
                 varhUnit = 'kVarh';
                 decimalPlaces = 2;
 
-                whCalculation = (wh_val) => (parseFloat(wh_val) / 1000) * currentMultiplier;
-                varhCalculation = (varh_val) => (parseFloat(varh_val) / 1000) * currentMultiplier;
+                const roundToDecimal = (value, decimals) => {
+                    const factor = Math.pow(10, decimals);
+                    return Math.round(value * factor) / factor;
+                };
+
+                whCalculation = (wh_val) => {
+                    const raw = (parseFloat(wh_val) / 1000) * currentMultiplier;
+                    return roundToDecimal(raw, decimalPlaces);
+                };
+
+                varhCalculation = (varh_val) => {
+                    const raw = (parseFloat(varh_val) / 1000) * currentMultiplier;
+                    return roundToDecimal(raw, decimalPlaces);
+                };
             }
+
+
 
             let tableRowsHtml = '';
 
@@ -414,7 +501,8 @@
 
                 filteredResults = globalResults.filter(r => {
                     // Filter by selected AR Type explicitly and by selected Month/Year
-                    return isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
+                    const isWithinBillingPeriod = isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
+                    return isWithinBillingPeriod;
                 });
             }
 
@@ -510,11 +598,11 @@
                     }
                     if (currentVarh > overallMaxKvar.value) {
                         overallMaxKvar.value = currentVarh;
-                        overallMaxKvar.datetime = r.datetime;
+                        overallKvar.datetime = r.datetime;
                     }
                 }
 
-                let displayDatetime = r.datetime;
+                let displayDatetime = r.datetime; // This is already formatted from process()
                 const cls = rate.toLowerCase().replace('-', '');
                 tableRowsHtml += `<tr class="${cls}">
                     <td>${displayDatetime}</td><td>${rate}</td>
@@ -653,6 +741,14 @@
                 option.textContent = `${monthNames[month - 1]} ${year + 543}`; // Display as Thai month and Buddhist year
                 selector.appendChild(option);
             });
+
+            // Set the default selected month to the latest month available
+            if (sortedUniqueMonthYears.length > 0) {
+                // Find the latest billing period based on AR type
+                // This logic might need refinement based on exact billing cycle definition
+                // For simplicity, let's just pick the last month in the sorted list as default
+                selector.value = sortedUniqueMonthYears[sortedUniqueMonthYears.length - 1];
+            }
         }
 
 
@@ -668,29 +764,36 @@
                 prevReadingYear--;
             }
 
-            // Determine the reading day for the previous month
+            // Determine the reading day for the previous month based on its number of days
             const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
-            if (prevReadingDay === -1) return {
-                startDate: null,
-                endDate: null
-            };
+            if (prevReadingDay === -1) {
+                console.error(`[getBillingPeriodDates] Failed to get previous reading day for ${prevReadingYear}-${prevReadingMonth}`);
+                return {
+                    startDate: null,
+                    endDate: null
+                };
+            }
 
             // Calculate the start date of the billing period
-            // It's the previous month's reading date at 00:15:00 BKK
+            // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
             billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
             billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
 
-            // Determine the reading day for the *current* billing month
+            // Determine the reading day for the *current* billing month based on its number of days
             const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
-            if (currentReadingDay === -1) return {
-                startDate: null,
-                endDate: null
-            };
+            if (currentReadingDay === -1) {
+                console.error(`[getBillingPeriodDates] Failed to get current reading day for ${selectedYear}-${selectedMonth}`);
+                return {
+                    startDate: null,
+                    endDate: null
+                };
+            }
 
             // Calculate the end date of the billing period
-            // It's the current month's reading date at 00:00:00 BKK (of the *next* day)
+            // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
             billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay + 1); // monthIndex is 0-indexed
+            
 
             return {
                 startDate: billingPeriodStartDate,
@@ -707,6 +810,8 @@
             const selectedArType = document.getElementById('arTypeSelector').value;
             const selectedUnit = document.getElementById('unitSelector').value;
 
+            console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}`);
+
             // New: Calculate and display billing period
             const billingPeriodInfoDiv = document.createElement('div');
             billingPeriodInfoDiv.className = 'summary-box billing-period-info';
@@ -722,16 +827,34 @@
                 } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
 
                 if (startDate && endDate) {
+                    // LOG: Check calculated startDate and endDate.
+                    // toISOString() always outputs in UTC, but since our dates are UTC-adjusted
+                    // they will show the BKK-equivalent UTC time.
+                    console.log(`[updateDisplay] Calculated Billing Period Start (UTC-adjusted BKK): ${startDate.toISOString()}`);
+                    console.log(`[updateDisplay] Calculated Billing Period End (UTC-adjusted BKK): ${endDate.toISOString()}`);
+
                     const formatDateTime = (dateObj) => {
-                        const bkkComponents = getBKKTimeComponents(dateObj);
+                        // This dateObj is already UTC-adjusted to represent BKK time.
+                        // So, we directly read its UTC components.
+                        const bkkComponents = {
+                            year: dateObj.getUTCFullYear(),
+                            month: dateObj.getUTCMonth(), // 0-indexed
+                            day: dateObj.getUTCDate(),
+                            hour: dateObj.getUTCHours(),
+                            minute: dateObj.getUTCMinutes()
+                        };
                         return `${bkkComponents.day.toString().padStart(2, '0')}/${(bkkComponents.month + 1).toString().padStart(2, '0')}/${bkkComponents.year + 543} ${bkkComponents.hour.toString().padStart(2, '0')}:${bkkComponents.minute.toString().padStart(2, '0')}:00`;
                     };
+
+                    // Removed: displayEndDate.setUTCMilliseconds(displayEndDate.getUTCMilliseconds() - 1); // Go back 1 millisecond
 
                     billingPeriodInfoDiv.innerHTML = `
                         <h3>ช่วงเวลาบิลลิ่ง</h3>
                         <p>ตั้งแต่: <strong>${formatDateTime(startDate)}</strong></p>
                         <p>ถึง: <strong>${formatDateTime(endDate)}</strong></p>
                     `;
+                } else {
+                    console.warn("[updateDisplay] Could not calculate billing period dates for display.");
                 }
             } else {
                 // If "All Data" is selected, indicate that
@@ -761,6 +884,14 @@
         }
 
         async function process() {
+            // *** เพิ่มการตรวจสอบสถานะการประมวลผล ***
+            if (isProcessed) {
+                console.log("File already processed. Skipping re-processing.");
+                // คุณอาจแสดงข้อความแจ้งเตือนผู้ใช้ที่นี่ เช่น alert("ไฟล์ได้ถูกประมวลผลไปแล้ว")
+                return;
+            }
+            // **********************************
+
             collectHolidays();
             const file = excelFileInput.files[0];
             if (!file) {
@@ -803,7 +934,7 @@
                 });
 
                 globalResults = [];
-                isProcessed = false;
+                isProcessed = false; // *** รีเซ็ตสถานะก่อนเริ่มประมวลผลข้อมูลใหม่ ***
 
                 for (let i = 3; i < rows.length; i++) {
                     const rawDate = rows[i][2]; // Column C, 0-indexed is 2
@@ -812,52 +943,25 @@
 
                     if (!rawDate || isNaN(originalWhValue) || isNaN(originalVarhValue)) continue;
 
-                    let dateObject;
+                    // *** ใช้ฟังก์ชัน helper ใหม่ในการแปลงวันที่จาก Excel ***
+                    let dateObjectBKK = convertExcelDateToBKKUTCAdjusted(rawDate);
+                    if (!dateObjectBKK) continue; // ถ้าแปลงไม่ได้ ให้ข้าม row นี้ไป
 
-                    if (rawDate instanceof Date) {
-                        dateObject = new Date(rawDate.getTime());
-                    } else if (typeof rawDate === 'number') {
-                        const parsed = XLSX.SSF.parse_date_code(rawDate);
-                        dateObject = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, parsed.S));
-                    } else if (typeof rawDate === 'string') {
-                        const match = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2}):(\d{2})|(\d{4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{2}):(\d{2})/);
-                        if (match) {
-                            if (match[1]) {
-                                const [, day, month, year, hour, minute, second] = match;
-                                const adYear = parseInt(year) > 2500 ? parseInt(year) - 543 : parseInt(year);
-                                dateObject = new Date(Date.UTC(adYear, parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second)));
-                            } else if (match[7]) {
-                                const [, , , , , , year, month, day, hour, minute, second] = match;
-                                dateObject = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second)));
-                            }
-                        } else {
-                            dateObject = new Date(rawDate);
-                        }
-                    } else {
-                        continue;
-                    }
-
-                    if (isNaN(dateObject.getTime())) continue;
-
-                    // Rounding to nearest 15-minute interval in BKK time
-                    const {
-                        hour: initialBkkHour,
-                        minute: initialBkkMinute,
-                        second: initialBkkSecond,
-                        year: initialBkkYear,
-                        month: initialBkkMonth,
-                        day: initialBkkDay
-                    } = getBKKTimeComponents(dateObject);
-
-                    const totalMinutesFromBKKMidnight = initialBkkHour * 60 + initialBkkMinute + initialBkkSecond / 60;
+                    // Rounding to nearest 15-minute interval for dateObjectBKK (ซึ่งตอนนี้ถูกปรับให้เป็น UTC-adjusted BKK แล้ว)
+                    const totalMinutesFromBKKMidnight = dateObjectBKK.getUTCHours() * 60 + dateObjectBKK.getUTCMinutes() + dateObjectBKK.getUTCSeconds() / 60;
                     const roundedTotalMinutesBKK = Math.round(totalMinutesFromBKKMidnight / 15) * 15;
 
+                    // Create the final roundedDateObjectUTC with the correct BKK time in its UTC components
                     const roundedDateObjectUTC = new Date(Date.UTC(
-                        initialBkkYear, initialBkkMonth, initialBkkDay, 0,
+                        dateObjectBKK.getUTCFullYear(),
+                        dateObjectBKK.getUTCMonth(),
+                        dateObjectBKK.getUTCDate(),
+                        0, // Start from midnight BKK (which is now in UTC components)
                         roundedTotalMinutesBKK,
                         0, 0
                     ));
-                    roundedDateObjectUTC.setUTCHours(roundedDateObjectUTC.getUTCHours() - 7);
+                    // No additional setUTCHours adjustment needed here as the previous steps ensured
+                    // that roundedDateObjectUTC has its UTC components representing the desired BKK time.
 
                     const displayBkkComponents = getBKKTimeComponents(roundedDateObjectUTC);
                     const formattedDatetime = `${displayBkkComponents.year}/${(displayBkkComponents.month + 1).toString().padStart(2, '0')}/${displayBkkComponents.day.toString().padStart(2, '0')} ${displayBkkComponents.hour.toString().padStart(2, '0')}:${displayBkkComponents.minute.toString().padStart(2, '0')}:00`;
@@ -866,11 +970,11 @@
                         datetime: formattedDatetime,
                         originalWhValue: originalWhValue,
                         originalVarhValue: originalVarhValue,
-                        dateObject: roundedDateObjectUTC
+                        dateObject: roundedDateObjectUTC // This is the UTC-adjusted BKK time
                     });
                 }
 
-                isProcessed = true;
+                isProcessed = true; // ตั้งค่าเป็น true เมื่อประมวลผลเสร็จสิ้น
                 sortState.columnIndex = null;
                 sortState.direction = 'asc';
 
@@ -1010,7 +1114,7 @@
             }
 
             // Add data rows
-            dataForExport.forEach(r => {
+            dataToExport.forEach(r => {
                 const wh = r.originalWhValue || 0;
                 const varh = r.originalVarhValue || 0;
 
