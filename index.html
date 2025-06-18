@@ -351,7 +351,7 @@
             // Calculate the end date of the billing period
             // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
             // This ensures data up to 24:00:00 (which is 00:00:00 of the next day) of the reading day is included.
-            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay + 1); // monthIndex is 0-indexed
+            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
 
             // LOG: Check calculated startDate and endDate.
             // console.log(`[isInBillingPeriod] Comparing: Date: ${dateObject.toISOString()} vs Start: ${billingPeriodStartDate.toISOString()} End: ${billingPeriodEndDate.toISOString()}`);
@@ -792,8 +792,8 @@
 
             // Calculate the end date of the billing period
             // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
-            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay + 1); // monthIndex is 0-indexed
-            
+            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
+
 
             return {
                 startDate: billingPeriodStartDate,
@@ -1114,7 +1114,14 @@
             }
 
             // Add data rows
-            dataToExport.forEach(r => {
+            // Add data rows
+            dataForExport.forEach(r => {
+                // Add this check to ensure 'r' and 'r.dateObject' are valid
+                if (!r || !r.dateObject) {
+                    console.error("Skipping malformed data row during export:", r);
+                    return; // Skip this iteration if the data is not as expected
+                }
+
                 const wh = r.originalWhValue || 0;
                 const varh = r.originalVarhValue || 0;
 
