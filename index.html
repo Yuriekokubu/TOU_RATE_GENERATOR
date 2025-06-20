@@ -420,24 +420,23 @@
             } else { // kWh, kVarh
                 whUnit = 'kWh';
                 varhUnit = 'kVarh';
-                decimalPlaces = 2;
-
-                const roundToDecimal = (value, decimals) => {
-                    const factor = Math.pow(10, decimals);
-                    return Math.round(value * factor) / factor;
-                };
+                decimalPlaces = 2; // กำหนดเป็น 2 ตำแหน่งตามที่คุณต้องการ
 
                 whCalculation = (wh_val) => {
-                    const raw = (parseFloat(wh_val) / 1000) * currentMultiplier;
-                    return roundToDecimal(raw, decimalPlaces);
+                    const raw = (parseFloat(wh_val) / 1000);
+                    const valueToRound = raw * currentMultiplier;
+                    // ✅ เพิ่ม Number.EPSILON เพื่อป้องกันการปัดเศษผิดพลาด
+                    const finalCalculatedValue = parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlaces));
+                    return finalCalculatedValue;
                 };
 
                 varhCalculation = (varh_val) => {
-                    const raw = (parseFloat(varh_val) / 1000) * currentMultiplier;
-                    return roundToDecimal(raw, decimalPlaces);
+                    const raw = (parseFloat(varh_val) / 1000);
+                    const valueToRound = raw * currentMultiplier;
+                    // ✅ แก้เหมือนกันเพื่อความเสถียร
+                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlaces));
                 };
-            }
-
+            } // ปิด else block
 
 
             let tableRowsHtml = '';
@@ -606,7 +605,7 @@
                 const cls = rate.toLowerCase().replace('-', '');
                 tableRowsHtml += `<tr class="${cls}">
                     <td>${displayDatetime}</td><td>${rate}</td>
-                    <td>${currentWh.toFixed(decimalPlaces)}</td><td>${currentVarh.toFixed(decimalPlaces)}</td>
+                    <td>${currentWh}</td><td>${currentVarh.toFixed(decimalPlaces)}</td>
                 </tr>`;
             });
 
@@ -1029,8 +1028,20 @@
                 varhUnit = 'kVarh';
                 decimalPlaces = 2;
 
-                whCalculation = (wh_val) => (parseFloat(wh_val) / 1000) * currentMultiplier;
-                varhCalculation = (varh_val) => (parseFloat(varh_val) / 1000) * currentMultiplier;
+                const roundToDecimal = (value, decimals) => {
+                    const factor = Math.pow(10, decimals);
+                    return Math.round(value * factor) / factor;
+                };
+
+                whCalculation = (wh_val) => {
+                    const raw = (parseFloat(wh_val) / 1000);
+                    return roundToDecimal(raw * currentMultiplier, decimalPlaces);
+                };
+
+                varhCalculation = (varh_val) => {
+                    const raw = (parseFloat(varh_val) / 1000);
+                    return roundToDecimal(raw * currentMultiplier, decimalPlaces);
+                };
             }
 
             const dataToExport = [];
@@ -1114,7 +1125,6 @@
             }
 
             // Add data rows
-            // Add data rows
             dataForExport.forEach(r => {
                 // Add this check to ensure 'r' and 'r.dateObject' are valid
                 if (!r || !r.dateObject) {
@@ -1125,7 +1135,17 @@
                 const wh = r.originalWhValue || 0;
                 const varh = r.originalVarhValue || 0;
 
+                // --- เพิ่ม console.log สำหรับ wh Calculation ใน export ---
+                console.log(`--- Export WH Calculation for Datetime: ${r.datetime} ---`);
+                console.log(`Raw WH value: ${wh}`);
+
+                const currentWhBeforeMultiplier = (unitType === 'kw_kvar') ? (parseFloat(wh) * 4 / 1000) : (parseFloat(wh) / 1000);
+                console.log(`WH value after initial conversion (before multiplier) for export: ${currentWhBeforeMultiplier.toFixed(decimalPlaces)}`);
+
                 const currentWh = whCalculation(wh);
+                console.log(`WH value after multiplier (final export): ${currentWh.toFixed(decimalPlaces)}`);
+                // ---------------------------------------------------------
+
                 const currentVarh = varhCalculation(varh);
 
                 const rate = getRate(r.dateObject);
