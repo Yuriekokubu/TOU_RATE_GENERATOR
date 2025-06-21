@@ -597,7 +597,7 @@
                     }
                     if (currentVarh > overallMaxKvar.value) {
                         overallMaxKvar.value = currentVarh;
-                        overallKvar.datetime = r.datetime;
+                        overallMaxKvar.datetime = r.datetime; // Corrected: Use overallMaxKvar
                     }
                 }
 
@@ -911,22 +911,60 @@
                 });
                 const sheet = wb.Sheets[wb.SheetNames[0]];
 
-                if (sheet['A4'] && sheet['A4'].v !== undefined) {
-                    meterNumber = sheet['A4'].v.toString();
+                // ตรวจสอบโครงสร้างไฟล์ Excel
+                // อ่าน header row เพื่อระบุประเภทของไฟล์
+                // สมมติว่า header อยู่ที่แถวแรก (index 0) สำหรับไฟล์ 3 คอลัมน์
+                // และอยู่ที่แถวที่ 3 (index 2) สำหรับไฟล์แบบเต็ม
+                let startRowForData = 3; // Default for existing structure
+                let rawDateCol, whCol, varhCol;
+                let isCompactFormat = false;
+
+                // Attempt to read headers from row 1 (0-indexed) for the compact format
+                const headerRowCompact = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 'A1:C1' })[0];
+                console.log("Header row for compact check:", headerRowCompact);
+
+                if (headerRowCompact && 
+                    headerRowCompact[0] === 'DATE_M' && 
+                    headerRowCompact[1] === 'WH' && 
+                    headerRowCompact[2] === 'VARHIMP Total') {
+                    
+                    console.log("Detected compact format (3 columns).");
+                    isCompactFormat = true;
+                    startRowForData = 1; // Data starts from row 2 (index 1) for compact format
+                    rawDateCol = 0; // Column A
+                    whCol = 1;      // Column B
+                    varhCol = 2;    // Column C
+
+                    // สำหรับไฟล์ 3 คอลัมน์ จะไม่มี meterNumber และ multiplier ในตำแหน่งเดิม
+                    // ตั้งค่าเป็น N/A หรือ 0 ไปก่อน หรืออาจจะต้องหาตำแหน่งใหม่ถ้ามีข้อมูลนี้
+                    meterNumber = 'N/A (Compact File)';
+                    multiplier = 1; // หรือค่าเริ่มต้นอื่นๆ ที่เหมาะสมสำหรับไฟล์ประเภทนี้
                 } else {
-                    meterNumber = 'N/A';
+                    console.log("Detected standard format.");
+                    isCompactFormat = false;
+                    startRowForData = 3; // Data starts from row 4 (index 3) for standard format
+                    rawDateCol = 2;  // Column C
+                    whCol = 26;      // Column AA
+                    varhCol = 34;    // Column AI
+
+                    if (sheet['A4'] && sheet['A4'].v !== undefined) {
+                        meterNumber = sheet['A4'].v.toString();
+                    } else {
+                        meterNumber = 'N/A';
+                    }
+
+                    const e4 = parseFloat(sheet['E4'] ? sheet['E4'].v : 0);
+                    const f4 = parseFloat(sheet['F4'] ? sheet['F4'].v : 0);
+                    const g4 = parseFloat(sheet['G4'] ? sheet['G4'].v : 0);
+                    const h4 = parseFloat(sheet['H4'] ? sheet['H4'].v : 0);
+
+                    if (f4 !== 0 && h4 !== 0) {
+                        multiplier = (e4 / f4) * (g4 / h4);
+                    } else {
+                        multiplier = 0;
+                    }
                 }
 
-                const e4 = parseFloat(sheet['E4'] ? sheet['E4'].v : 0);
-                const f4 = parseFloat(sheet['F4'] ? sheet['F4'].v : 0);
-                const g4 = parseFloat(sheet['G4'] ? sheet['G4'].v : 0);
-                const h4 = parseFloat(sheet['H4'] ? sheet['H4'].v : 0);
-
-                if (f4 !== 0 && h4 !== 0) {
-                    multiplier = (e4 / f4) * (g4 / h4);
-                } else {
-                    multiplier = 0;
-                }
 
                 const rows = XLSX.utils.sheet_to_json(sheet, {
                     header: 1
@@ -935,10 +973,10 @@
                 globalResults = [];
                 isProcessed = false; // *** รีเซ็ตสถานะก่อนเริ่มประมวลผลข้อมูลใหม่ ***
 
-                for (let i = 3; i < rows.length; i++) {
-                    const rawDate = rows[i][2]; // Column C, 0-indexed is 2
-                    const originalWhValue = parseFloat(rows[i][26]) || 0;
-                    const originalVarhValue = parseFloat(rows[i][34]) || 0;
+                for (let i = startRowForData; i < rows.length; i++) {
+                    const rawDate = rows[i][rawDateCol];
+                    const originalWhValue = parseFloat(rows[i][whCol]) || 0;
+                    const originalVarhValue = parseFloat(rows[i][varhCol]) || 0;
 
                     if (!rawDate || isNaN(originalWhValue) || isNaN(originalVarhValue)) continue;
 
