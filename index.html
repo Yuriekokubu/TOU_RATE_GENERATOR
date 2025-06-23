@@ -320,43 +320,70 @@
 
             let billingPeriodStartDate, billingPeriodEndDate;
 
-            // Determine the month and year for the *previous* reading
-            let prevReadingMonth = selectedMonth - 1; // 1-indexed month
-            let prevReadingYear = selectedYear;
-            if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
-                prevReadingMonth = 12;
-                prevReadingYear--;
+            if (arType === 'HA1') {
+                // For HA1, billing period is from 00:15 of the 1st of selectedMonth
+                // to 00:00 of the 1st of the NEXT month.
+
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, 1); // 1st of selected month
+                billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
+
+                let nextMonth = selectedMonth + 1;
+                let nextMonthYear = selectedYear;
+                if (nextMonth > 12) {
+                    nextMonth = 1;
+                    nextMonthYear++;
+                }
+                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1); // 1st of next month
+
+            } else {
+                // Existing logic for AR1 and AR6
+                // Determine the month and year for the *previous* reading
+                let prevReadingMonth = selectedMonth - 1; // 1-indexed month
+                let prevReadingYear = selectedYear;
+                if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
+                    prevReadingMonth = 12;
+                    prevReadingYear--;
+                }
+
+                // Determine the reading day for the previous month based on its number of days
+                const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
+                if (prevReadingDay === -1) {
+                    console.warn(`[isInBillingPeriod] Could not determine prevReadingDay for ${prevReadingYear}-${prevReadingMonth}`);
+                    return false;
+                }
+
+                // Calculate the start date of the billing period
+                // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
+                billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
+
+
+                // Determine the reading day for the *current* billing month based on its number of days
+                const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
+                if (currentReadingDay === -1) {
+                    console.warn(`[isInBillingPeriod] Could not determine currentReadingDay for ${selectedYear}-${selectedMonth}`);
+                    return false;
+                }
+
+                // Calculate the end date of the billing period
+                // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
+                thisMonthReadingDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
+                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime()); // Copy the date
+                billingPeriodEndDate.setUTCHours(0); // Set to midnight of the reading day itself
+                billingPeriodEndDate.setUTCMinutes(0);
+                billingPeriodEndDate.setUTCSeconds(0);
+                // The current logic of checking <= dateObject.getTime() for end date automatically includes
+                // data up to 24:00:00 of the reading day (which is 00:00:00 of the next day)
+                // So, if reading day is 21st, data up to 21st 24:00 (i.e., 22nd 00:00) is included.
+                // This seems consistent with the original intent.
             }
-
-            // Determine the reading day for the previous month based on its number of days
-            const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
-            if (prevReadingDay === -1) {
-                console.warn(`[isInBillingPeriod] Could not determine prevReadingDay for ${prevReadingYear}-${prevReadingMonth}`);
-                return false;
-            }
-
-            // Calculate the start date of the billing period
-            // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
-            billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
-            billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
-
-
-            // Determine the reading day for the *current* billing month based on its number of days
-            const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
-            if (currentReadingDay === -1) {
-                console.warn(`[isInBillingPeriod] Could not determine currentReadingDay for ${selectedYear}-${selectedMonth}`);
-                return false;
-            }
-
-            // Calculate the end date of the billing period
-            // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
-            // This ensures data up to 24:00:00 (which is 00:00:00 of the next day) of the reading day is included.
-            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
 
             // LOG: Check calculated startDate and endDate.
             // console.log(`[isInBillingPeriod] Comparing: Date: ${dateObject.toISOString()} vs Start: ${billingPeriodStartDate.toISOString()} End: ${billingPeriodEndDate.toISOString()}`);
 
             // CHANGE: Changed from < to <= to include the exact 00:00:00 of the next day.
+            // For HA1, this means data up to 00:00:00 of the 1st of the next month (exclusive of 00:15)
+            // For AR1/AR6, data up to 00:00:00 of the day *after* the reading day is included
             return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() <= billingPeriodEndDate.getTime();
         }
 
@@ -394,91 +421,68 @@
             const currentMultiplier = applyMultiplier ? multiplier : 1;
 
             let whCalculation, varhCalculation;
-            let decimalPlaces;
+            let decimalPlacesForSummary; // สำหรับสรุปค่า kW/kVar สูงสุด และ kWh/kVarh รวม
+            const decimalPlacesForKwKvarTable = 6; // *** NEW: สำหรับ kW/kVar ในตาราง 6 ตำแหน่ง ***
 
             if (unitType === 'kw_kvar') {
                 whUnit = 'kW';
                 varhUnit = 'kVar';
-                decimalPlaces = 3;
+                decimalPlacesForSummary = 3; // สำหรับสรุป kW/kVar สูงสุด ยังคง 3 ตำแหน่ง
 
+                // whCalculation และ varhCalculation สำหรับการคำนวณค่าจริง
+                // การปัดทศนิยมจะถูกจัดการในแต่ละที่ที่นำไปใช้
                 whCalculation = (wh_val) => {
                     let baseKw = (parseFloat(wh_val) * 4 / 1000);
-                    let roundedBaseKw = parseFloat(baseKw.toFixed(decimalPlaces));
                     if (applyMultiplier) {
-                        return roundedBaseKw * currentMultiplier;
+                        return baseKw * currentMultiplier;
                     }
-                    return roundedBaseKw;
+                    return baseKw;
                 };
                 varhCalculation = (varh_val) => {
                     let baseKvar = (parseFloat(varh_val) * 4 / 1000);
-                    let roundedBaseKvar = parseFloat(baseKvar.toFixed(decimalPlaces));
                     if (applyMultiplier) {
-                        return roundedBaseKvar * currentMultiplier;
+                        return baseKvar * currentMultiplier;
                     }
-                    return roundedBaseKvar;
+                    return baseKvar;
                 };
             } else { // kWh, kVarh
                 whUnit = 'kWh';
                 varhUnit = 'kVarh';
-                decimalPlaces = 2; // กำหนดเป็น 2 ตำแหน่งตามที่คุณต้องการ
+                decimalPlacesForSummary = 2; // สำหรับ kWh/kVarh รวม ยังคง 2 ตำแหน่ง
 
                 whCalculation = (wh_val) => {
                     const raw = (parseFloat(wh_val) / 1000);
                     const valueToRound = raw * currentMultiplier;
-                    // ✅ เพิ่ม Number.EPSILON เพื่อป้องกันการปัดเศษผิดพลาด
-                    const finalCalculatedValue = parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlaces));
-                    return finalCalculatedValue;
+                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
                 };
 
                 varhCalculation = (varh_val) => {
                     const raw = (parseFloat(varh_val) / 1000);
                     const valueToRound = raw * currentMultiplier;
-                    // ✅ แก้เหมือนกันเพื่อความเสถียร
-                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlaces));
+                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
                 };
-            } // ปิด else block
-
+            }
 
             let tableRowsHtml = '';
 
-            let maxKwValues = {
-                'Peak': {
-                    value: 0,
-                    datetime: ''
-                },
-                'Off-peak': {
-                    value: 0,
-                    datetime: ''
-                },
-                'Holiday': {
-                    value: 0,
-                    datetime: ''
-                }
+            // --- START: New variables to track MAX RAW values and their datetimes ---
+            // These will ONLY store the raw WH/VARHIMP Total values
+            let maxRawWhValues = {
+                'Peak': { value: 0, datetime: '' },
+                'Off-peak': { value: 0, datetime: '' },
+                'Holiday': { value: 0, datetime: '' }
             };
-            let maxKvarValues = {
-                'Peak': {
-                    value: 0,
-                    datetime: ''
-                },
-                'Off-peak': {
-                    value: 0,
-                    datetime: ''
-                },
-                'Holiday': {
-                    value: 0,
-                    datetime: ''
-                }
+            let maxRawVarhValues = {
+                'Peak': { value: 0, datetime: '' },
+                'Off-peak': { value: 0, datetime: '' },
+                'Holiday': { value: 0, datetime: '' }
             };
-            let overallMaxKw = {
-                value: 0,
-                datetime: ''
-            };
-            let overallMaxKvar = {
-                value: 0,
-                datetime: ''
-            };
+            let overallMaxRawWh = { value: 0, datetime: '' };
+            let overallMaxRawVarh = { value: 0, datetime: '' };
+            // --- END: New variables to track MAX RAW values and their datetimes ---
 
-            // New summary variables for total consumption
+
+            // New summary variables for total consumption (these accumulate already processed values)
             let totalWhConsumption = {
                 'Peak': 0,
                 'Off-peak': 0,
@@ -515,21 +519,29 @@
 
                 let whUnitConverterForSort, varhUnitConverterForSort;
                 if (selectedUnit === 'kw_kvar') {
-                    whUnitConverterForSort = (wh) => {
-                        let baseKw = (parseFloat(wh) * 4 / 1000);
-                        let roundedBaseKw = parseFloat(baseKw.toFixed(3));
-                        if (applyMultiplierForSort) return roundedBaseKw * currentMultiplierForSort;
-                        return roundedBaseKw;
+                    // สำหรับการ Sort kW/kVar เรายังคงต้องการความละเอียด (ไม่ปัดทิ้ง) เพื่อการเรียงที่ถูกต้อง
+                    // จะใช้ค่าที่ยังไม่ปัดทศนิยม เพื่อให้การเรียงลำดับแม่นยำ
+                    whUnitConverterForSort = (wh_val) => {
+                        let baseKw = (parseFloat(wh_val) * 4 / 1000);
+                        if (applyMultiplierForSort) return baseKw * currentMultiplierForSort;
+                        return baseKw;
                     };
-                    varhUnitConverterForSort = (varh) => {
-                        let baseKvar = (parseFloat(varh) * 4 / 1000);
-                        let roundedBaseKvar = parseFloat(baseKvar.toFixed(3));
-                        if (applyMultiplierForSort) return roundedBaseKvar * currentMultiplierForSort;
-                        return roundedBaseKvar;
+                    varhUnitConverterForSort = (varh_val) => {
+                        let baseKvar = (parseFloat(varh_val) * 4 / 1000);
+                        if (applyMultiplierForSort) return baseKvar * currentMultiplierForSort;
+                        return baseKvar;
                     };
-                } else {
-                    whUnitConverterForSort = (wh) => (parseFloat(wh) / 1000) * currentMultiplierForSort;
-                    varhUnitConverterForSort = (varh) => (parseFloat(varh) / 1000) * currentMultiplierForSort;
+                } else { // kWh/kVarh สำหรับ Sort ให้ปัดตาม decimalPlacesForSummary
+                    whUnitConverterForSort = (wh_val) => {
+                        const raw = (parseFloat(wh_val) / 1000);
+                        const valueToRound = raw * currentMultiplierForSort;
+                        return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
+                    };
+                    varhUnitConverterForSort = (varh_val) => {
+                        const raw = (parseFloat(varh_val) / 1000);
+                        const valueToRound = raw * currentMultiplierForSort;
+                        return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
+                    };
                 }
 
                 dataToRender.sort((a, b) => {
@@ -569,44 +581,61 @@
             }
 
             dataToRender.forEach(r => {
-                const wh = r.originalWhValue || 0;
-                const varh = r.originalVarhValue || 0;
-
-                const currentWh = whCalculation(wh);
-                const currentVarh = varhCalculation(varh);
+                const rawWh = r.originalWhValue || 0; // Use rawWh directly for max comparison
+                const rawVarh = r.originalVarhValue || 0; // Use rawVarh directly for max comparison
 
                 const rate = getRate(r.dateObject);
 
-                // Update total consumption
+                // --- START: Update MAX RAW values (STRICTLY RAW) ---
+                if (unitType === 'kw_kvar') {
+                    if (rawWh > maxRawWhValues[rate].value) {
+                        maxRawWhValues[rate].value = rawWh;
+                        maxRawWhValues[rate].datetime = r.datetime;
+                    }
+                    if (rawVarh > maxRawVarhValues[rate].value) {
+                        maxRawVarhValues[rate].value = rawVarh;
+                        maxRawVarhValues[rate].datetime = r.datetime;
+                    }
+
+                    if (rawWh > overallMaxRawWh.value) {
+                        overallMaxRawWh.value = rawWh;
+                        overallMaxRawWh.datetime = r.datetime;
+                    }
+                    if (rawVarh > overallMaxRawVarh.value) {
+                        overallMaxRawVarh.value = rawVarh;
+                        overallMaxRawVarh.datetime = r.datetime;
+                    }
+                }
+                // --- END: Update MAX RAW values ---
+
+
+                // Calculate currentWh and currentVarh for individual table display
+                const currentWh = whCalculation(rawWh); // Pass rawWh to calculation
+                const currentVarh = varhCalculation(rawVarh); // Pass rawVarh to calculation
+
+                // --- HERE IS THE KEY CHANGE FOR TABLE DISPLAY ---
+                let displayWhInTable, displayVarhInTable;
+                if (unitType === 'kw_kvar') {
+                    // สำหรับ kW/kVar ในตาราง ให้ปัดเป็น 6 ตำแหน่ง
+                    displayWhInTable = currentWh.toFixed(decimalPlacesForKwKvarTable);
+                    displayVarhInTable = currentVarh.toFixed(decimalPlacesForKwKvarTable);
+                } else {
+                    // สำหรับ kWh/kVarh ในตาราง ยังคงปัดตาม decimalPlacesForSummary (ซึ่งคือ 2)
+                    displayWhInTable = currentWh.toFixed(decimalPlacesForSummary);
+                    displayVarhInTable = currentVarh.toFixed(decimalPlacesForSummary);
+                }
+
+                // Update total consumption (these are already calculated with multiplier if checked)
                 totalWhConsumption[rate] += currentWh;
                 totalVarhConsumption[rate] += currentVarh;
 
-                if (unitType === 'kw_kvar') {
-                    if (currentWh > maxKwValues[rate].value) {
-                        maxKwValues[rate].value = currentWh;
-                        maxKwValues[rate].datetime = r.datetime;
-                    }
-                    if (currentVarh > maxKvarValues[rate].value) {
-                        maxKvarValues[rate].value = currentVarh;
-                        maxKvarValues[rate].datetime = r.datetime;
-                    }
-
-                    if (currentWh > overallMaxKw.value) {
-                        overallMaxKw.value = currentWh;
-                        overallMaxKw.datetime = r.datetime;
-                    }
-                    if (currentVarh > overallMaxKvar.value) {
-                        overallMaxKvar.value = currentVarh;
-                        overallMaxKvar.datetime = r.datetime; // Corrected: Use overallMaxKvar
-                    }
-                }
 
                 let displayDatetime = r.datetime; // This is already formatted from process()
                 const cls = rate.toLowerCase().replace('-', '');
                 tableRowsHtml += `<tr class="${cls}">
-                    <td>${displayDatetime}</td><td>${rate}</td>
-                    <td>${currentWh}</td><td>${currentVarh.toFixed(decimalPlaces)}</td>
-                </tr>`;
+            <td>${displayDatetime}</td><td>${rate}</td>
+            <td>${displayWhInTable}</td><td>${displayVarhInTable}</td>
+        </tr>`;
             });
 
             const formattedMultiplier = multiplier.toLocaleString('en-US', {
@@ -615,11 +644,11 @@
             });
 
             let meterInfoHtml = `
-                <div class="summary-box meter-info">
-                    <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
-                    <p>หมายเลขมิเตอร์: <strong>${meterNumber || 'N/A'}</strong></p>
-                    <p>ข้อมูลตัวคูณ: <strong>${formattedMultiplier}</strong></p>
-                </div>`;
+        <div class="summary-box meter-info">
+            <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
+            <p>หมายเลขมิเตอร์: <strong>${meterNumber || 'N/A'}</strong></p>
+            <p>ข้อมูลตัวคูณ: <strong>${formattedMultiplier}</strong></p>
+        </div>`;
 
             let mainSummaryHtml = '';
 
@@ -628,50 +657,67 @@
 
             // Max kW/kVar Summary (if unitType is kw_kvar)
             if (unitType === 'kw_kvar') {
+                // --- START: Calculate final kW/kVar for display using max RAW values ---
+                // ONLY HERE DO WE APPLY whCalculation/varhCalculation TO THE MAX RAW VALUES
+                // และปัดทศนิยมตาม decimalPlacesForSummary (ซึ่งคือ 3)
+                const displayOverallMaxKw = whCalculation(overallMaxRawWh.value).toFixed(decimalPlacesForSummary);
+                const displayOverallMaxKvar = varhCalculation(overallMaxRawVarh.value).toFixed(decimalPlacesForSummary);
+
+                const displayPeakMaxKw = whCalculation(maxRawWhValues['Peak'].value).toFixed(decimalPlacesForSummary);
+                const displayPeakMaxKvar = varhCalculation(maxRawVarhValues['Peak'].value).toFixed(decimalPlacesForSummary);
+
+                const displayOffPeakMaxKw = whCalculation(maxRawWhValues['Off-peak'].value).toFixed(decimalPlacesForSummary);
+                const displayOffPeakMaxKvar = varhCalculation(maxRawVarhValues['Off-peak'].value).toFixed(decimalPlacesForSummary);
+
+                const displayHolidayMaxKw = whCalculation(maxRawWhValues['Holiday'].value).toFixed(decimalPlacesForSummary);
+                const displayHolidayMaxKvar = varhCalculation(maxRawVarhValues['Holiday'].value).toFixed(decimalPlacesForSummary);
+                // --- END: Calculate final kW/kVar for display using max RAW values ---
+
+
                 mainSummaryHtml += `
-                    <div class="summary-box overall-max-summary">
-                        <h3>kW/kVar สูงสุดรวมทุกเรท</h3>
-                        <p>kW: <strong>${overallMaxKw.value.toFixed(decimalPlaces)} ${whUnit}</strong><br>
-                        <small>เมื่อ: ${overallMaxKw.datetime || 'N/A'}</small></p>
-                        <p>kVar: <strong>${overallMaxKvar.value.toFixed(decimalPlaces)} ${varhUnit}</strong><br>
-                        <small>เมื่อ: ${overallMaxKvar.datetime || 'N/A'}</small></p>
-                    </div>
-                    <div class="summary-box max-kw-peak-summary">
-                        <h3>kW/kVar สูงสุด (Peak)</h3>
-                        <p>kW: <strong>${maxKwValues['Peak'].value.toFixed(decimalPlaces)} ${whUnit}</strong><br>
-                        <small>เมื่อ: ${maxKwValues['Peak'].datetime || 'N/A'}</small></p>
-                        <p>kVar: <strong>${maxKvarValues['Peak'].value.toFixed(decimalPlaces)} ${varhUnit}</strong><br>
-                        <small>เมื่อ: ${maxKvarValues['Peak'].datetime || 'N/A'}</small></p>
-                    </div>
-                    <div class="summary-box max-kw-off-peak-summary">
-                        <h3>kW/kVar สูงสุด (Off-peak)</h3>
-                        <p>kW: <strong>${maxKwValues['Off-peak'].value.toFixed(decimalPlaces)} ${whUnit}</strong><br>
-                        <small>เมื่อ: ${maxKwValues['Off-peak'].datetime || 'N/A'}</small></p>
-                        <p>kVar: <strong>${maxKvarValues['Off-peak'].value.toFixed(decimalPlaces)} ${varhUnit}</strong><br>
-                        <small>เมื่อ: ${maxKvarValues['Off-peak'].datetime || 'N/A'}</small></p>
-                    </div>
-                    <div class="summary-box max-kw-holiday-summary">
-                        <h3>kW/kVar สูงสุด (Holiday)</h3>
-                        <p>kW: <strong>${maxKwValues['Holiday'].value.toFixed(decimalPlaces)} ${whUnit}</strong><br>
-                        <small>เมื่อ: ${maxKwValues['Holiday'].datetime || 'N/A'}</small></p>
-                        <p>kVar: <strong>${maxKvarValues['Holiday'].value.toFixed(decimalPlaces)} ${varhUnit}</strong><br>
-                        <small>เมื่อ: ${maxKvarValues['Holiday'].datetime || 'N/A'}</small></p>
-                    </div>
-                `;
+            <div class="summary-box overall-max-summary">
+                <h3>kW/kVar สูงสุดรวมทุกเรท</h3>
+                <p>kW: <strong>${displayOverallMaxKw} ${whUnit}</strong><br>
+                <small>เมื่อ: ${overallMaxRawWh.datetime || 'N/A'}</small></p>
+                <p>kVar: <strong>${displayOverallMaxKvar} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${overallMaxRawVarh.datetime || 'N/A'}</small></p>
+            </div>
+            <div class="summary-box max-kw-peak-summary">
+                <h3>kW/kVar สูงสุด (Peak)</h3>
+                <p>kW: <strong>${displayPeakMaxKw} ${whUnit}</strong><br>
+                <small>เมื่อ: ${maxRawWhValues['Peak'].datetime || 'N/A'}</small></p>
+                <p>kVar: <strong>${displayPeakMaxKvar} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${maxRawVarhValues['Peak'].datetime || 'N/A'}</small></p>
+            </div>
+            <div class="summary-box max-kw-off-peak-summary">
+                <h3>kW/kVar สูงสุด (Off-peak)</h3>
+                <p>kW: <strong>${displayOffPeakMaxKw} ${whUnit}</strong><br>
+                <small>เมื่อ: ${maxRawWhValues['Off-peak'].datetime || 'N/A'}</small></p>
+                <p>kVar: <strong>${displayOffPeakMaxKvar} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${maxRawVarhValues['Off-peak'].datetime || 'N/A'}</small></p>
+            </div>
+            <div class="summary-box max-kw-holiday-summary">
+                <h3>kW/kVar สูงสุด (Holiday)</h3>
+                <p>kW: <strong>${displayHolidayMaxKw} ${whUnit}</strong><br>
+                <small>เมื่อ: ${maxRawWhValues['Holiday'].datetime || 'N/A'}</small></p>
+                <p>kVar: <strong>${displayHolidayMaxKvar} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${maxRawVarhValues['Holiday'].datetime || 'N/A'}</small></p>
+            </div>
+        `;
             }
 
             // Total Consumption Summary (for both kWh/kVarh and kW/kVar units, but values change)
             // This block will only be added if unitType is 'kwh_kvarh'
             if (unitType === 'kwh_kvarh') {
                 mainSummaryHtml += `
-                    <div class="summary-box consumption-summary">
-                        <h3>สรุปการใช้พลังงาน (รวม)</h3>
-                        <p>รวม Peak: <strong>${totalWhConsumption['Peak'].toFixed(decimalPlaces)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Peak'].toFixed(decimalPlaces)} ${varhUnit}</strong></p>
-                        <p>รวม Off-peak: <strong>${totalWhConsumption['Off-peak'].toFixed(decimalPlaces)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Off-peak'].toFixed(decimalPlaces)} ${varhUnit}</strong></p>
-                        <p>รวม Holiday: <strong>${totalWhConsumption['Holiday'].toFixed(decimalPlaces)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Holiday'].toFixed(decimalPlaces)} ${varhUnit}</strong></p>
-                        <p class="total-overall">รวมทั้งหมด: <strong>${(totalWhConsumption['Peak'] + totalWhConsumption['Off-peak'] + totalWhConsumption['Holiday']).toFixed(decimalPlaces)} ${whUnit}</strong>, <strong>${(totalVarhConsumption['Peak'] + totalVarhConsumption['Off-peak'] + totalVarhConsumption['Holiday']).toFixed(decimalPlaces)} ${varhUnit}</strong></p>
-                    </div>
-                `;
+            <div class="summary-box consumption-summary">
+                <h3>สรุปการใช้พลังงาน (รวม)</h3>
+                <p>รวม Peak: <strong>${totalWhConsumption['Peak'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Peak'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
+                <p>รวม Off-peak: <strong>${totalWhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
+                <p>รวม Holiday: <strong>${totalWhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
+                <p class="total-overall">รวมทั้งหมด: <strong>${(totalWhConsumption['Peak'] + totalWhConsumption['Off-peak'] + totalWhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${(totalVarhConsumption['Peak'] + totalVarhConsumption['Off-peak'] + totalVarhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
+            </div>
+        `;
             }
 
             mainSummaryHtml += '</div>'; // End of Rate Summary Container
@@ -694,13 +740,14 @@
                 const isActiveSort = sortState.columnIndex !== null && sortState.columnIndex === h.index;
                 const sortClass = isActiveSort ? `active-sort ${sortState.direction}` : '';
                 return `<th class="sortable ${sortClass}" onclick="sortTable(${h.index})" data-column-index="${h.index}">
-                                ${h.title} <span class="sort-indicator"></span>
-                            </th>`;
+                        ${h.title} <span class="sort-indicator"></span>
+                    </th>`;
             }).join('');
 
             let tableHtml = `<table><tr>${headerHtml}</tr>${tableRowsHtml}</table>`;
 
             document.getElementById('output').innerHTML = meterInfoHtml + mainSummaryHtml + tableHtml;
+            updateExportButtonVisibility(); // Ensure the export button is visible after rendering
         }
 
         // Renamed and modified function to populate only Month and Year
@@ -755,44 +802,63 @@
         function getBillingPeriodDates(selectedYear, selectedMonth, arType) {
             let billingPeriodStartDate, billingPeriodEndDate;
 
-            // Determine the month and year for the *previous* reading
-            let prevReadingMonth = selectedMonth - 1; // 1-indexed month
-            let prevReadingYear = selectedYear;
-            if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
-                prevReadingMonth = 12;
-                prevReadingYear--;
+            if (arType === 'HA1') {
+                // HA1: From 00:15 of the 1st of selectedMonth to 00:00 of the 1st of the NEXT month.
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, 1); // 1st of selected month
+                billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
+
+                let nextMonth = selectedMonth + 1;
+                let nextMonthYear = selectedYear;
+                if (nextMonth > 12) {
+                    nextMonth = 1;
+                    nextMonthYear++;
+                }
+                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1); // 1st of next month
+
+            } else {
+                // Existing logic for AR1 and AR6
+                // Determine the month and year for the *previous* reading
+                let prevReadingMonth = selectedMonth - 1; // 1-indexed month
+                let prevReadingYear = selectedYear;
+                if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
+                    prevReadingMonth = 12;
+                    prevReadingYear--;
+                }
+
+                // Determine the reading day for the previous month based on its number of days
+                const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
+                if (prevReadingDay === -1) {
+                    console.error(`[getBillingPeriodDates] Failed to get previous reading day for ${prevReadingYear}-${prevReadingMonth}`);
+                    return {
+                        startDate: null,
+                        endDate: null
+                    };
+                }
+
+                // Calculate the start date of the billing period
+                // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
+                billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
+
+
+                // Determine the reading day for the *current* billing month based on its number of days
+                const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
+                if (currentReadingDay === -1) {
+                    console.error(`[getBillingPeriodDates] Failed to get current reading day for ${selectedYear}-${selectedMonth}`);
+                    return {
+                        startDate: null,
+                        endDate: null
+                    };
+                }
+
+                // Calculate the end date of the billing period
+                // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
+                thisMonthReadingDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
+                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime()); // Copy the date
+                billingPeriodEndDate.setUTCHours(0); // Set to midnight of the reading day itself
+                billingPeriodEndDate.setUTCMinutes(0);
+                billingPeriodEndDate.setUTCSeconds(0);
             }
-
-            // Determine the reading day for the previous month based on its number of days
-            const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
-            if (prevReadingDay === -1) {
-                console.error(`[getBillingPeriodDates] Failed to get previous reading day for ${prevReadingYear}-${prevReadingMonth}`);
-                return {
-                    startDate: null,
-                    endDate: null
-                };
-            }
-
-            // Calculate the start date of the billing period
-            // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
-            billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
-            billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
-
-
-            // Determine the reading day for the *current* billing month based on its number of days
-            const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
-            if (currentReadingDay === -1) {
-                console.error(`[getBillingPeriodDates] Failed to get current reading day for ${selectedYear}-${selectedMonth}`);
-                return {
-                    startDate: null,
-                    endDate: null
-                };
-            }
-
-            // Calculate the end date of the billing period
-            // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
-            billingPeriodEndDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
-
 
             return {
                 startDate: billingPeriodStartDate,
@@ -923,11 +989,11 @@
                 const headerRowCompact = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 'A1:C1' })[0];
                 console.log("Header row for compact check:", headerRowCompact);
 
-                if (headerRowCompact && 
-                    headerRowCompact[0] === 'DATE_M' && 
-                    headerRowCompact[1] === 'WH' && 
+                if (headerRowCompact &&
+                    headerRowCompact[0] === 'DATE_M' &&
+                    headerRowCompact[1] === 'WH' &&
                     headerRowCompact[2] === 'VARHIMP Total') {
-                    
+
                     console.log("Detected compact format (3 columns).");
                     isCompactFormat = true;
                     startRowForData = 1; // Data starts from row 2 (index 1) for compact format
