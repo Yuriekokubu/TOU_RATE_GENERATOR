@@ -29,7 +29,6 @@ body {
     border-radius: var(--border-radius);
     box-shadow: 10px 10px 20px var(--shadow-dark), -10px -10px 20px var(--shadow-light);
     width: 100%;
-    max-width: 1200px; /* Increased max-width */
     box-sizing: border-box;
     text-align: center;
     margin-top: var(--spacing); /* Add some margin to the top */
