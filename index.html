@@ -70,15 +70,14 @@
 
     <script>
         const holidays = new Set();
-        let globalResults = [];
-        let isProcessed = false; // สถานะการประมวลผลไฟล์
+        let globalResults = []; // Stores all raw data from the Excel file
+        let isProcessed = false; // Status if file is processed
         let meterNumber = '';
-        let multiplier = 0;
+        let multiplier = 0; // The base multiplier from the Excel file
 
-        // *** เปลี่ยนโครงสร้างของ monthlySummaries และ monthlyMaxValues ***
-        let monthlySummaries = {}; // เก็บผลรวม kWh, kVarh รายเดือน (หลังคูณตัวคูณ)
-        let monthlyMaxValues = {}; // เก็บค่าสูงสุด kW, kVar รายเดือน (หลังคูณตัวคูณ)
-        // *************************************************************
+        // monthlySummaries and monthlyMaxValues will now store the data for the CURRENTLY DISPLAYED summary data (all months)
+        let monthlySummaries = {};
+        let monthlyMaxValues = {};
 
         let sortState = {
             columnIndex: null,
@@ -113,7 +112,7 @@
             const files = dt.files;
 
             if (files.length > 0) {
-                // รีเซ็ต isProcessed เมื่อมีการลากไฟล์ใหม่
+                // Reset isProcessed when a new file is dropped
                 isProcessed = false;
                 excelFileInput.files = files;
                 process();
@@ -126,15 +125,13 @@
 
         excelFileInput.addEventListener('change', () => {
             if (excelFileInput.files.length > 0) {
-                // รีเซ็ต isProcessed เมื่อมีการเลือกไฟล์ใหม่
+                // Reset isProcessed when a new file is selected
                 isProcessed = false;
                 process();
             }
         });
 
         // Helper function to extract BKK time components from a UTC-adjusted Date object.
-        // It assumes the input utcDateObj has already been adjusted to reflect BKK time
-        // in its UTC components.
         function getBKKTimeComponents(utcDateObj) {
             return {
                 hour: utcDateObj.getUTCHours(),
@@ -161,44 +158,31 @@
             const bkkOffsetMs = 7 * 60 * 60 * 1000; // 7 hours in milliseconds
 
             if (rawDate instanceof Date) {
-                // หากเป็น Date object อยู่แล้ว (อาจมาจาก cellDates: true)
-                // Date object นี้จะถูกสร้างโดย XLSX library โดยใช้เวลาท้องถิ่นของระบบที่เปิดไฟล์
-                // เราต้องการให้ UTC components ของมันเป็น BKK Time
-                // จึงเพิ่ม offset ของ BKK (7 ชั่วโมง) ไปที่ timestamp ของมันโดยตรง
                 dateObj = new Date(rawDate.getTime() + bkkOffsetMs);
             } else if (typeof rawDate === 'number') {
-                // หากเป็นตัวเลขจาก Excel (serial date)
                 const parsed = XLSX.SSF.parse_date_code(rawDate);
-                // XLSX.SSF.parse_date_code จะคืนค่าเป็น y, m, d, H, M, S ที่ "เป็นกลาง" (ไม่ได้บอกว่าเป็น UTC หรือ Local)
-                // เราจะถือว่าค่าเหล่านี้คือ BKK Time และสร้าง Date.UTC() โดยตรง
-                // ทำให้ UTC components ของ dateObj แทน BKK Time ทันที
                 dateObj = new Date(Date.UTC(parsed.y, parsed.m - 1, parsed.d, parsed.H, parsed.M, parsed.S));
             } else if (typeof rawDate === 'string') {
-                // หากเป็น String
                 const match = rawDate.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s*(\d{1,2}):(\d{2}):(\d{2})|(\d{4})-(\d{1,2})-(\d{1,2})T(\d{1,2}):(\d{2}):(\d{2})/);
                 if (match) {
                     let year, month, day, hour, minute, second;
                     if (match[1]) { // DD/MM/YYYY HH:mm:ss format
                         [, day, month, year, hour, minute, second] = match;
                         year = parseInt(year) > 2500 ? parseInt(year) - 543 : parseInt(year); // Convert Buddhist year to AD
-                    } else if (match[7]) { // YYYY-MM-DDTHH:mm:ss format
+                    } else if (match[7]) { //YYYY-MM-DDTHH:mm:ss format
                         [, , , , , , year, month, day, hour, minute, second] = match;
                     }
-                    // ถือว่า string components เหล่านี้คือ BKK Time และสร้าง Date.UTC() โดยตรง
                     dateObj = new Date(Date.UTC(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hour), parseInt(minute), parseInt(second)));
                 } else {
-                    // กรณี string format อื่นๆ (อาจเป็น ISO 8601 ที่ไม่มี Z หรือ Time Zone offset)
-                    // ลองให้ Date constructor จัดการ ซึ่งมักจะตีความเป็น Local Time ของระบบ
                     let tempDate = new Date(rawDate);
-                    if (!isNaN(tempDate.getTime())) { // ตรวจสอบว่า parse ได้จริง
-                        // เพิ่ม offset ของ BKK (7 ชั่วโมง) ไปที่ timestamp ของมันโดยตรง
+                    if (!isNaN(tempDate.getTime())) {
                         dateObj = new Date(tempDate.getTime() + bkkOffsetMs);
                     } else {
-                        return null; // parse ไม่ได้
+                        return null;
                     }
                 }
             } else {
-                return null; // ไม่ใช่รูปแบบที่รองรับ
+                return null;
             }
 
             return isNaN(dateObj.getTime()) ? null : dateObj;
@@ -220,10 +204,8 @@
                         const [d, m, byear] = entry.holiday.split('/');
                         const year = parseInt(byear) - 543;
 
-                        // Create a Date object representing the holiday at midnight in BKK timezone (UTC components match BKK)
                         const bkkHolidayMidnight = getBKKMidnightUTCAdjusted(year, parseInt(m) - 1, parseInt(d));
 
-                        // Store its ISO string (which will correctly be YYYY-MM-DD from UTC components matching BKK)
                         const isoDate = bkkHolidayMidnight.toISOString().split('T')[0];
                         holidays.add(isoDate);
                     }
@@ -232,20 +214,16 @@
         }
 
         function isHoliday(date) {
-            // date is a UTC-adjusted Date object (its UTC components reflect BKK time)
-            let checkDate = new Date(date.getTime()); // Create a copy to avoid modifying original
+            let checkDate = new Date(date.getTime());
 
-            const bkkComponents = getBKKTimeComponents(checkDate); // Get BKK components from the UTC-adjusted date
+            const bkkComponents = getBKKTimeComponents(checkDate);
             let hour = bkkComponents.hour;
             let min = bkkComponents.minute;
 
             if (hour === 0 && min < 15) {
-                // If the BKK time is between 00:00 and 00:14,
-                // adjust the date backwards by one BKK day (by adjusting UTC components).
                 checkDate.setUTCHours(checkDate.getUTCHours() - 24);
             }
 
-            // Convert to YYYY-MM-DD for holiday set lookup
             const finalBkkComponents = getBKKTimeComponents(checkDate);
             const iso = finalBkkComponents.year + '-' +
                 String(finalBkkComponents.month + 1).padStart(2, '0') + '-' +
@@ -254,24 +232,20 @@
         }
 
         function getRate(date) {
-            // date is a UTC-adjusted Date object (its UTC components reflect BKK time)
-            let checkDate = new Date(date.getTime()); // Create a copy to avoid modifying original
+            let checkDate = new Date(date.getTime());
 
-            const bkkComponents = getBKKTimeComponents(checkDate); // Get BKK components from the UTC-adjusted date
+            const bkkComponents = getBKKTimeComponents(checkDate);
             let hour = bkkComponents.hour;
             let min = bkkComponents.minute;
 
-            // If time is 00:00 to 00:14, consider it part of the previous day
             if (hour === 0 && min < 15) {
-                // Adjust the date backwards by one BKK day for rate calculation
                 checkDate.setUTCHours(checkDate.getUTCHours() - 24);
-                // Re-calculate hour/min from the adjusted date for rate logic
                 const adjustedBkkComponents = getBKKTimeComponents(checkDate);
                 hour = adjustedBkkComponents.hour;
                 min = adjustedBkkComponents.minute;
             }
 
-            const day = getBKKTimeComponents(checkDate).dayOfWeek; // Get BKK day of week (0=อาทิตย์, 6=เสาร์)
+            const day = getBKKTimeComponents(checkDate).dayOfWeek;
             if (isHoliday(date) || day === 0 || day === 6) {
                 return 'Holiday';
             }
@@ -287,108 +261,67 @@
             }
         }
 
-        // Helper function to get the number of days in a month
-        // month is 1-indexed (1=Jan, 12=Dec)
         function getDaysInMonth(year, month) {
-            // month + 1 as new Date(year, month, 0) gives last day of previous month for 0-indexed month
-            // So, new Date(year, month, 0) will give the last day of the 'month' parameter
             return new Date(Date.UTC(year, month, 0)).getUTCDate();
         }
 
-
-        // Modified getReadingDay to calculate based on days in month
         function getReadingDay(year, month, arType) { // month is 1-indexed here (1-12)
-            const numDaysInMonth = getDaysInMonth(year, month); // Get days for the given month
+            const numDaysInMonth = getDaysInMonth(year, month);
 
             if (arType === 'AR1') {
-                // If the month has 31 days -> 31 - 10 = 21
-                // If the month has 30 days -> 30 - 10 = 20
-                // If the month has 28 days (Feb) -> 28 - 10 = 18
-                // If the month has 29 days (Leap Feb) -> 29 - 10 = 19
                 return numDaysInMonth - 10;
             } else if (arType === 'AR6') {
-                // If the month has 31 days -> 31 - 2 = 29
-                // If the month has 30 days -> 30 - 2 = 28
-                // If the month has 28 days (Feb) -> 28 - 2 = 26
-                // If the month has 29 days (Leap Feb) -> 29 - 2 = 27
                 return numDaysInMonth - 2;
             } else if (arType === 'HA1') {
-                return 1; // Fixed to 1st of the month
+                return 1;
             }
             console.error(`[getReadingDay] Unknown AR Type: ${arType}`);
-            return -1; // Should not happen
+            return -1;
         }
 
-        function isInBillingPeriod(dateObject, arType, selectedMonth, selectedYear) {
-            // dateObject is `roundedDateObjectUTC`, which has its UTC components
-            // already adjusted to represent BKK time.
-
+        function isInBillingPeriod(dateObject, arType, targetMonth, targetYear) {
             let billingPeriodStartDate, billingPeriodEndDate;
 
             if (arType === 'HA1') {
-                // For HA1, billing period is from 00:15 of the 1st of selectedMonth
-                // to 00:00 of the 1st of the NEXT month.
-
-                billingPeriodStartDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, 1); // 1st of selected month
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(targetYear, targetMonth - 1, 1);
                 billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
-                let nextMonth = selectedMonth + 1;
-                let nextMonthYear = selectedYear;
+                let nextMonth = targetMonth + 1;
+                let nextMonthYear = targetYear;
                 if (nextMonth > 12) {
                     nextMonth = 1;
                     nextMonthYear++;
                 }
-                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1); // 1st of next month
+                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1);
 
             } else {
-                // Existing logic for AR1 and AR6
-                // Determine the month and year for the *previous* reading
-                let prevReadingMonth = selectedMonth - 1; // 1-indexed month
-                let prevReadingYear = selectedYear;
-                if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
+                let prevReadingMonth = targetMonth - 1;
+                let prevReadingYear = targetYear;
+                if (prevReadingMonth === 0) {
                     prevReadingMonth = 12;
                     prevReadingYear--;
                 }
 
-                // Determine the reading day for the previous month based on its number of days
                 const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
                 if (prevReadingDay === -1) {
-                    console.warn(`[isInBillingPeriod] Could not determine prevReadingDay for ${prevReadingYear}-${prevReadingMonth}`);
                     return false;
                 }
 
-                // Calculate the start date of the billing period
-                // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
-                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay);
                 billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
-
-                // Determine the reading day for the *current* billing month based on its number of days
-                const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
+                const currentReadingDay = getReadingDay(targetYear, targetMonth, arType);
                 if (currentReadingDay === -1) {
-                    console.warn(`[isInBillingPeriod] Could not determine currentReadingDay for ${selectedYear}-${selectedMonth}`);
                     return false;
                 }
 
-                // Calculate the end date of the billing period
-                // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
-                thisMonthReadingDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
-                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime()); // Copy the date
-                billingPeriodEndDate.setUTCHours(0); // Set to midnight of the reading day itself
+                let thisMonthReadingDate = getBKKMidnightUTCAdjusted(targetYear, targetMonth - 1, currentReadingDay);
+                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime());
+                billingPeriodEndDate.setUTCHours(0);
                 billingPeriodEndDate.setUTCMinutes(0);
                 billingPeriodEndDate.setUTCSeconds(0);
-                // The current logic of checking <= dateObject.getTime() for end date automatically includes
-                // data up to 24:00:00 of the reading day (which is 00:00:00 of the next day)
-                // So, if reading day is 21st, data up to 21st 24:00 (i.e., 22nd 00:00) is included.
-                // This seems consistent with the original intent.
             }
 
-            // LOG: Check calculated startDate and endDate.
-            // console.log(`[isInBillingPeriod] Comparing: Date: ${dateObject.toISOString()} vs Start: ${billingPeriodStartDate.toISOString()} End: ${billingPeriodEndDate.toISOString()}`);
-
-            // CHANGE: Changed from < to <= to include the exact 00:00:00 of the next day.
-            // For HA1, this means data up to 00:00:00 of the 1st of the next month (exclusive of 00:15)
-            // For AR1/AR6, data up to 00:00:00 of the day *after* the reading day is included
             return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() <= billingPeriodEndDate.getTime();
         }
 
@@ -416,58 +349,49 @@
             return Math.round(value * factor) / factor;
         }
 
-        // Renamed and modified function to populate only Month and Year
         function populateMonthYearSelector() {
             const selector = document.getElementById('monthYearSelector');
-            selector.innerHTML = ''; // Clear existing options
+            selector.innerHTML = '';
 
             const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-            // Collect unique year-month combinations from globalResults
-            const uniqueMonthYears = new Set(); // Stores as "YYYY-MM" (e.g., "2024-05")
+            const uniqueMonthYears = new Set();
             globalResults.forEach(r => {
                 const {
                     year,
                     month
-                } = getBKKTimeComponents(r.dateObject); // month is 0-indexed
-                uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`); // Store as YYYY-MM
+                } = getBKKTimeComponents(r.dateObject);
+                uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`);
             });
 
-            // Sort unique periods chronologically
             const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
 
-            // Add 'All Data' option
             const allOption = document.createElement('option');
             allOption.value = 'all';
             allOption.textContent = 'แสดงข้อมูลทั้งหมด';
             selector.appendChild(allOption);
 
-            // Add options for each unique month and year
             sortedUniqueMonthYears.forEach(periodStr => {
                 const [yearStr, monthStr] = periodStr.split('-');
                 const year = parseInt(yearStr);
-                const month = parseInt(monthStr); // 1-indexed month
+                const month = parseInt(monthStr);
 
                 const option = document.createElement('option');
-                option.value = `${year}-${month.toString().padStart(2, '0')}`; // Value as "YYYY-MM"
-                option.textContent = `${monthNames[month - 1]} ${year + 543}`; // Display as Thai month and Buddhist year
+                option.value = `${year}-${month.toString().padStart(2, '0')}`;
+                option.textContent = `${monthNames[month - 1]} ${year + 543}`;
                 selector.appendChild(option);
             });
 
-            // Set the default selected month to the latest month available
             if (sortedUniqueMonthYears.length > 0) {
                 selector.value = sortedUniqueMonthYears[sortedUniqueMonthYears.length - 1];
             }
         }
 
-
-        // Helper function to calculate billing period start and end dates
         function getBillingPeriodDates(selectedYear, selectedMonth, arType) {
             let billingPeriodStartDate, billingPeriodEndDate;
 
             if (arType === 'HA1') {
-                // HA1: From 00:15 of the 1st of selectedMonth to 00:00 of the 1st of the NEXT month.
-                billingPeriodStartDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, 1); // 1st of selected month
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, 1);
                 billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
                 let nextMonth = selectedMonth + 1;
@@ -476,19 +400,16 @@
                     nextMonth = 1;
                     nextMonthYear++;
                 }
-                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1); // 1st of next month
+                billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1);
 
             } else {
-                // Existing logic for AR1 and AR6
-                // Determine the month and year for the *previous* reading
-                let prevReadingMonth = selectedMonth - 1; // 1-indexed month
+                let prevReadingMonth = selectedMonth - 1;
                 let prevReadingYear = selectedYear;
-                if (prevReadingMonth === 0) { // If current month is January, previous is December of last year
+                if (prevReadingMonth === 0) {
                     prevReadingMonth = 12;
                     prevReadingYear--;
                 }
 
-                // Determine the reading day for the previous month based on its number of days
                 const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
                 if (prevReadingDay === -1) {
                     console.error(`[getBillingPeriodDates] Failed to get previous reading day for ${prevReadingYear}-${prevReadingMonth}`);
@@ -498,13 +419,10 @@
                     };
                 }
 
-                // Calculate the start date of the billing period
-                // It's the previous month's reading date at 00:15:00 BKK (UTC components match BKK)
-                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay); // monthIndex is 0-indexed for getBKKMidnightUTCAdjusted
+                billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay);
                 billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
 
-                // Determine the reading day for the *current* billing month based on its number of days
                 const currentReadingDay = getReadingDay(selectedYear, selectedMonth, arType);
                 if (currentReadingDay === -1) {
                     console.error(`[getBillingPeriodDates] Could not determine currentReadingDay for ${selectedYear}-${selectedMonth}`);
@@ -514,11 +432,9 @@
                     };
                 }
 
-                // Calculate the end date of the billing period
-                // It's the current month's reading date at 00:00:00 BKK (of the *next* day) (UTC components match BKK)
-                thisMonthReadingDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay); // monthIndex is 0-indexed
-                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime()); // Copy the date
-                billingPeriodEndDate.setUTCHours(0); // Set to midnight of the reading day itself
+                let thisMonthReadingDate = getBKKMidnightUTCAdjusted(selectedYear, selectedMonth - 1, currentReadingDay);
+                billingPeriodEndDate = new Date(thisMonthReadingDate.getTime());
+                billingPeriodEndDate.setUTCHours(0);
                 billingPeriodEndDate.setUTCMinutes(0);
                 billingPeriodEndDate.setUTCSeconds(0);
             }
@@ -530,9 +446,92 @@
         }
 
 
-        function renderMonthlySummaryTable() {
-            if (!isProcessed || Object.keys(monthlySummaries).length === 0) {
-                return ''; // Don't render if no data or not processed
+        // MODIFIED: New function to calculate monthly summaries and max values FOR ALL MONTHS, based on selected AR Type
+        function calculateAllMonthsSummariesAndMaxes(selectedArType) {
+            const calculatedMonthlySummaries = {};
+            const calculatedMonthlyMaxValues = {};
+
+            // Get the current state of the multiplier checkbox
+            const applyMultiplierForSummaryCalculation = document.getElementById('applyMultiplier').checked;
+            const currentMultiplierForSummaryCalculation = applyMultiplierForSummaryCalculation ? multiplier : 1;
+
+            globalResults.forEach(r => {
+                const originalWhValue = r.originalWhValue || 0;
+                const originalVarhValue = r.originalVarhValue || 0;
+                const dateObjectBKK = r.dateObject; // This is the UTC-adjusted BKK time
+
+                // Determine the month key for this data point based on its actual BKK time
+                const bkkComponents = getBKKTimeComponents(dateObjectBKK);
+                const dataPointMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
+
+                // The crucial change: for each data point, determine *its* billing period based on its OWN month/year
+                // and the CURRENTLY SELECTED arType.
+                const targetMonthForDataPoint = bkkComponents.month + 1; // 1-indexed
+                const targetYearForDataPoint = bkkComponents.year;
+
+                // Check if the data point falls within its *own* billing period as defined by the selectedArType
+                const isWithinDataPointBillingPeriod = isInBillingPeriod(dateObjectBKK, selectedArType, targetMonthForDataPoint, targetYearForDataPoint);
+
+                if (isWithinDataPointBillingPeriod) {
+                    const rate = getRate(dateObjectBKK);
+
+                    // Initialize structures for this month if they don't exist
+                    if (!calculatedMonthlySummaries[dataPointMonthKey]) {
+                        calculatedMonthlySummaries[dataPointMonthKey] = {
+                            'Peak': { wh: 0, varh: 0 },
+                            'Off-peak': { wh: 0, varh: 0 },
+                            'Holiday': { wh: 0, varh: 0 }
+                        };
+                    }
+                    if (!calculatedMonthlyMaxValues[dataPointMonthKey]) {
+                        calculatedMonthlyMaxValues[dataPointMonthKey] = {
+                            'Peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
+                            'Off-peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
+                            'Holiday': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' }
+                        };
+                    }
+
+                    // Apply multiplier here if checkbox is checked for the summary calculation
+                    const kWh_calculated_base_for_sum = (originalWhValue * currentMultiplierForSummaryCalculation / 1000);
+                    const kVarh_calculated_base_for_sum = (originalVarhValue * currentMultiplierForSummaryCalculation / 1000);
+
+                    calculatedMonthlySummaries[dataPointMonthKey][rate].wh += kWh_calculated_base_for_sum;
+                    calculatedMonthlySummaries[dataPointMonthKey][rate].varh += kVarh_calculated_base_for_sum;
+
+                    // kW and kVar max calculation also needs the multiplier applied consistently
+                    const kW_calculated_base = (Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000);
+                    const kVar_calculated_base = (Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000);
+
+
+                    if (kW_calculated_base > calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh ||
+                        (kW_calculated_base === calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh &&
+                            new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh_datetime))) {
+                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh = kW_calculated_base;
+                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh_datetime = r.datetime;
+                    }
+                    if (kVar_calculated_base > calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh ||
+                        (kVar_calculated_base === calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh &&
+                            new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh_datetime))) {
+                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh = kVar_calculated_base;
+                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh_datetime = r.datetime;
+                    }
+                }
+            });
+
+            return { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues };
+        }
+
+
+        function renderMonthlySummaryTable(monthlySummariesToRender, monthlyMaxValuesToRender) {
+            // Note: This function now expects 'monthlySummariesToRender' to contain all months relevant to the file,
+            // with values filtered by the currently selected AR type.
+            if (!isProcessed || Object.keys(monthlySummariesToRender).length === 0) {
+                return `
+                    <div class="summary-section">
+                        <h2 class="section-title">สรุปข้อมูลการใช้พลังงานรายเดือน</h2>
+                        <p>ไม่พบข้อมูลการใช้พลังงานสำหรับประเภท AR ที่เลือก</p>
+                    </div>
+                `;
             }
 
             let monthlyTableHtml = `
@@ -561,55 +560,60 @@
             `;
 
             const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-            const sortedMonthKeys = Object.keys(monthlySummaries).sort();
+            const sortedMonthKeys = Object.keys(monthlySummariesToRender).sort();
 
             const applyMultiplierCheckbox = document.getElementById('applyMultiplier');
             const applyMultiplierToSummary = applyMultiplierCheckbox ? applyMultiplierCheckbox.checked : false;
-            const currentMultiplierForSummary = applyMultiplierToSummary ? multiplier : 1;
+            // Removed currentMultiplierForSummary as it's no longer needed here.
+            // The values in monthlySummariesToRender are ALREADY multiplied if the checkbox was checked.
+
+            const decimalPlacesForKwhSummary = 2;
+            const decimalPlacesForKwSummary = 3;
 
 
             sortedMonthKeys.forEach(monthKey => {
                 const [yearStr, monthStr] = monthKey.split('-');
                 const year = parseInt(yearStr);
-                const monthIndex = parseInt(monthStr) - 1; // 0-indexed month
+                const monthIndex = parseInt(monthStr) - 1;
 
-                const currentMonthSummary = monthlySummaries[monthKey]; // RAW kWh, kVarh sums
-                const currentMonthMax = monthlyMaxValues[monthKey];   // RAW Max kW, kVar values
+                const currentMonthSummary = monthlySummariesToRender[monthKey];
+                const currentMonthMax = monthlyMaxValuesToRender[monthKey];
 
-                // Apply multiplier at display time
-                const displayTotalWhMonth = (currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) * currentMultiplierForSummary;
-                const displayTotalVarhMonth = (currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh) * currentMultiplierForSummary;
+                // These values are now already multiplied if the checkbox was checked during calculation in calculateAllMonthsSummariesAndMaxes
+                const displayTotalWhMonth = customRound((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh), decimalPlacesForKwhSummary);
+                console.log(currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
 
-                const displayPeakWh = currentMonthSummary['Peak'].wh * currentMultiplierForSummary;
-                const displayOffPeakWh = currentMonthSummary['Off-peak'].wh * currentMultiplierForSummary;
-                const displayHolidayWh = currentMonthSummary['Holiday'].wh * currentMultiplierForSummary;
+                const displayTotalVarhMonth = customRound((currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh), decimalPlacesForKwhSummary);
 
-                const displayPeakKw = currentMonthMax['Peak'].wh * currentMultiplierForSummary;
-                const displayOffPeakKw = currentMonthMax['Off-peak'].wh * currentMultiplierForSummary;
-                const displayHolidayKw = currentMonthMax['Holiday'].wh * currentMultiplierForSummary;
+                const displayPeakWh = customRound(currentMonthSummary['Peak'].wh, decimalPlacesForKwhSummary);
+                const displayOffPeakWh = customRound(currentMonthSummary['Off-peak'].wh, decimalPlacesForKwhSummary);
+                const displayHolidayWh = customRound(currentMonthSummary['Holiday'].wh, decimalPlacesForKwhSummary);
 
-                // Find overall max RAW kVar for the month across all rates
-                let rawMaxKvarMonthOverall = 0;
+                const displayPeakKw = customRound(currentMonthMax['Peak'].wh, decimalPlacesForKwSummary);
+                const displayOffPeakKw = customRound(currentMonthMax['Off-peak'].wh, decimalPlacesForKwSummary);
+                const displayHolidayKw = customRound(currentMonthMax['Holiday'].wh, decimalPlacesForKwSummary);
+
+                let baseMaxKvarMonthOverall = 0;
                 ['Peak', 'Off-peak', 'Holiday'].forEach(rate => {
-                    if (currentMonthMax[rate].varh > rawMaxKvarMonthOverall) {
-                        rawMaxKvarMonthOverall = currentMonthMax[rate].varh;
+                    if (currentMonthMax[rate].varh > baseMaxKvarMonthOverall) {
+                        baseMaxKvarMonthOverall = currentMonthMax[rate].varh;
                     }
                 });
-                const displayMaxKvarMonthOverall = rawMaxKvarMonthOverall * currentMultiplierForSummary;
+                const displayMaxKvarMonthOverall = customRound(baseMaxKvarMonthOverall, decimalPlacesForKwSummary);
 
 
                 monthlyTableHtml += `
                     <tr>
                         <td>${monthNames[monthIndex]} ${year + 543}</td>
-                        <td>${displayTotalWhMonth.toFixed(2)}</td>
-                        <td>${displayPeakWh.toFixed(2)}</td>
-                        <td>${displayOffPeakWh.toFixed(2)}</td>
-                        <td>${displayHolidayWh.toFixed(2)}</td>
-                        <td>${displayTotalVarhMonth.toFixed(2)}</td>
-                        <td>${displayPeakKw.toFixed(3)}</td>
-                        <td>${displayOffPeakKw.toFixed(3)}</td>
-                        <td>${displayHolidayKw.toFixed(3)}</td>
-                        <td>${displayMaxKvarMonthOverall.toFixed(3)}</td>
+                        <td>${displayTotalWhMonth.toFixed(decimalPlacesForKwhSummary)}</td>
+                        <td>${displayPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                        <td>${displayOffPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                        <td>${displayHolidayWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                        <td>${displayTotalVarhMonth.toFixed(decimalPlacesForKwhSummary)}</td>
+                        <td>${displayPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
+                        <td>${displayOffPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
+                        <td>${displayHolidayKw.toFixed(decimalPlacesForKwSummary)}</td>
+                        <td>${displayMaxKvarMonthOverall.toFixed(decimalPlacesForKwSummary)}</td>
                         <td><small>${currentMonthMax['Peak'].wh_datetime || 'N/A'}</small></td>
                         <td><small>${currentMonthMax['Off-peak'].wh_datetime || 'N/A'}</small></td>
                         <td><small>${currentMonthMax['Holiday'].wh_datetime || 'N/A'}</small></td>
@@ -627,76 +631,51 @@
         }
 
 
-        // Modified renderResults to accept selectedMonthYear and selectedArType
-        // Renamed to renderResultsAsHtml to return HTML string
         function renderResultsAsHtml(unitType, selectedMonthYear, selectedArType) {
-            if (!isProcessed) return ''; // Return empty string if not processed
+            if (!isProcessed) return '';
 
             let whUnit, varhUnit;
             const applyMultiplier = document.getElementById('applyMultiplier').checked;
             const currentMultiplier = applyMultiplier ? multiplier : 1;
 
             let whCalculation, varhCalculation;
-            let decimalPlacesForSummary; // สำหรับสรุปค่า kW/kVar สูงสุด และ kWh/kVarh รวม
-            const decimalPlacesForKwKvarTable = 6; // สำหรับ kW/kVar ในตาราง 6 ตำแหน่ง
+            let decimalPlacesForSummary;
+            let decimalPlacesForTable;
 
             if (unitType === 'kw_kvar') {
                 whUnit = 'kW';
                 varhUnit = 'kVar';
-                decimalPlacesForSummary = 3; // สำหรับสรุป kW/kVar สูงสุด ยังคง 3 ตำแหน่ง
+                decimalPlacesForSummary = 3;
+                decimalPlacesForTable = 3;
 
-                whCalculation = (wh_val) => {
-                    let baseKw = (parseFloat(wh_val) * 4 / 1000);
-                    if (applyMultiplier) {
-                        return baseKw * currentMultiplier;
-                    }
-                    return baseKw;
+                whCalculation = (wh_val_raw) => {
+                    const roundedWhTimesFour = Math.round(parseFloat(wh_val_raw) * 4);
+                    return customRound((roundedWhTimesFour * currentMultiplier / 1000), decimalPlacesForTable);
                 };
-                varhCalculation = (varh_val) => {
-                    let baseKvar = (parseFloat(varh_val) * 4 / 1000);
-                    if (applyMultiplier) {
-                        return baseKvar * currentMultiplier;
-                    }
-                    return baseKvar;
+                varhCalculation = (varh_val_raw) => {
+                    const roundedVarhTimesFour = Math.round(parseFloat(varh_val_raw) * 4);
+                    return customRound((roundedVarhTimesFour * currentMultiplier / 1000), decimalPlacesForTable);
                 };
             } else { // kWh, kVarh
                 whUnit = 'kWh';
                 varhUnit = 'kVarh';
-                decimalPlacesForSummary = 2; // สำหรับ kWh/kVarh รวม ยังคง 2 ตำแหน่ง
+                decimalPlacesForSummary = 2;
+                decimalPlacesForTable = 2; // เปลี่ยนตรงนี้ให้เป็น 2
 
-                whCalculation = (wh_val) => {
-                    const raw = (parseFloat(wh_val) / 1000);
-                    const valueToRound = raw * currentMultiplier;
-                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
+                whCalculation = (wh_val_raw) => {
+                    return customRound((parseFloat(wh_val_raw) * currentMultiplier / 1000), decimalPlacesForTable);
                 };
 
-                varhCalculation = (varh_val) => {
-                    const raw = (parseFloat(varh_val) / 1000);
-                    const valueToRound = raw * currentMultiplier;
-                    return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
+                varhCalculation = (varh_val_raw) => {
+                    return customRound((parseFloat(varh_val_raw) * currentMultiplier / 1000), decimalPlacesForTable);
                 };
             }
 
             let tableRowsHtml = '';
 
-            // --- START: New variables to track MAX RAW values and their datetimes ---
-            // These will ONLY store the raw WH/VARHIMP Total values
-            let maxRawWhValues = {
-                'Peak': { value: 0, datetime: '' },
-                'Off-peak': { value: 0, datetime: '' },
-                'Holiday': { value: 0, datetime: '' }
-            };
-            let maxRawVarhValues = {
-                'Peak': { value: 0, datetime: '', },
-                'Off-peak': { value: 0, datetime: '' },
-                'Holiday': { value: 0, datetime: '' }
-            };
-            let overallMaxRawWh = { value: 0, datetime: '' };
-            let overallMaxRawVarh = { value: 0, datetime: '' };
-            // --- END: New variables to track MAX RAW values and their datetimes ---
+            let overallMaxBaseKwCalculated = { value: 0, datetime: '' };
+            let overallMaxBaseKvarCalculated = { value: 0, datetime: '' };
 
-
-            // New summary variables for total consumption (these accumulate already processed values)
             let totalWhConsumption = {
                 'Peak': 0,
                 'Off-peak': 0,
@@ -709,22 +688,20 @@
             };
 
             let filteredResults = [];
-            if (selectedMonthYear === 'all') { // If "All Data" is selected for month/year
+            if (selectedMonthYear === 'all') {
                 filteredResults = [...globalResults];
             } else {
                 const [yearStr, monthStr] = selectedMonthYear.split('-');
-                const selectedMonthInt = parseInt(monthStr); // 1-indexed
-                const selectedYearInt = parseInt(yearStr); // AD year
+                const selectedMonthInt = parseInt(monthStr);
+                const selectedYearInt = parseInt(yearStr);
 
                 filteredResults = globalResults.filter(r => {
-                    // Filter by selected AR Type explicitly and by selected Month/Year
                     const isWithinBillingPeriod = isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
                     return isWithinBillingPeriod;
                 });
             }
 
-            // Apply sorting to filteredResults
-            const dataToRender = [...filteredResults]; // Clone for sorting
+            const dataToRender = [...filteredResults];
             if (sortState.columnIndex !== null) {
                 const directionModifier = sortState.direction === 'asc' ? 1 : -1;
                 const selectedUnit = document.getElementById('unitSelector').value;
@@ -733,28 +710,14 @@
 
                 let whUnitConverterForSort, varhUnitConverterForSort;
                 if (selectedUnit === 'kw_kvar') {
-                    // สำหรับการ Sort kW/kVar เรายังคงต้องการความละเอียด (ไม่ปัดทิ้ง) เพื่อการเรียงที่ถูกต้อง
-                    // จะใช้ค่าที่ยังไม่ปัดทศนิยม เพื่อให้การเรียงลำดับแม่นยำ
+                    whUnitConverterForSort = (wh_val) => (Math.round(parseFloat(wh_val) * 4) / 1000) * currentMultiplierForSort;
+                    varhUnitConverterForSort = (varh_val) => (Math.round(parseFloat(varh_val) * 4) / 1000) * currentMultiplierForSort;
+                } else {
                     whUnitConverterForSort = (wh_val) => {
-                        let baseKw = (parseFloat(wh_val) * 4 / 1000);
-                        if (applyMultiplierForSort) return baseKw * currentMultiplierForSort;
-                        return baseKw;
+                        return (parseFloat(wh_val) / 1000) * currentMultiplierForSort;
                     };
                     varhUnitConverterForSort = (varh_val) => {
-                        let baseKvar = (parseFloat(varh_val) * 4 / 1000);
-                        if (applyMultiplierForSort) return baseKvar * currentMultiplierForSort;
-                        return baseKvar;
-                    };
-                } else { // kWh/kVarh สำหรับ Sort ให้ปัดตาม decimalPlacesForSummary
-                    whUnitConverterForSort = (wh_val) => {
-                        const raw = (parseFloat(wh_val) / 1000);
-                        const valueToRound = raw * currentMultiplierForSort;
-                        return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
-                    };
-                    varhUnitConverterForSort = (varh_val) => {
-                        const raw = (parseFloat(varh_val) / 1000);
-                        const valueToRound = raw * currentMultiplierForSort;
-                        return parseFloat((valueToRound + Number.EPSILON).toFixed(decimalPlacesForSummary));
+                        return (parseFloat(varh_val) / 1000) * currentMultiplierForSort;
                     };
                 }
 
@@ -795,121 +758,117 @@
             }
 
             dataToRender.forEach(r => {
-                const rawWh = r.originalWhValue || 0; // Use rawWh directly for max comparison
-                const rawVarh = r.originalVarhValue || 0; // Use rawVarh directly for max comparison
+                const rawWh = r.originalWhValue || 0;
+                const rawVarh = r.originalVarhValue || 0;
 
-                const rate = getRate(r.dateObject);
+                if (unitType === 'kw_kvar') {
+                    const currentCalculatedKwBase = Math.round(rawWh * 4) / 1000;
+                    const currentCalculatedKvarBase = Math.round(rawVarh * 4) / 1000;
 
-                // --- START: Update MAX RAW values (STRICTLY RAW) ---
-                if (unitType === 'kw_kvar') { // Only track RAW max if we are in kW/kVar display mode
-                    // rawWh and rawVarh here are the actual raw values from the Excel, BEFORE any unit conversion or multiplier.
-                    // This is essential for accurately finding the "peak" in the raw data,
-                    // and then applying conversion/multiplier for display.
-                    if (rawWh * 4 > maxRawWhValues[rate].value * 4) { // Compare actual power (kW equivalent)
-                        maxRawWhValues[rate].value = rawWh;
-                        maxRawWhValues[rate].datetime = r.datetime;
-                    }
-                    if (rawVarh * 4 > maxRawVarhValues[rate].value * 4) { // Compare actual reactive power (kVar equivalent)
-                        maxRawVarhValues[rate].value = rawVarh;
-                        maxRawVarhValues[rate].datetime = r.datetime;
+                    if (currentCalculatedKwBase > overallMaxBaseKwCalculated.value ||
+                        (currentCalculatedKwBase === overallMaxBaseKwCalculated.value &&
+                            new Date(r.datetime) < new Date(overallMaxBaseKwCalculated.datetime))) {
+                        overallMaxBaseKwCalculated.value = currentCalculatedKwBase;
+                        overallMaxBaseKwCalculated.datetime = r.datetime;
                     }
 
-                    if (rawWh * 4 > overallMaxRawWh.value * 4) {
-                        overallMaxRawWh.value = rawWh;
-                        overallMaxRawWh.datetime = r.datetime;
-                    }
-                    if (rawVarh * 4 > overallMaxRawVarh.value * 4) {
-                        overallMaxRawVarh.value = rawVarh;
-                        overallMaxRawVarh.datetime = r.datetime;
+                    if (currentCalculatedKvarBase > overallMaxBaseKvarCalculated.value ||
+                        (currentCalculatedKvarBase === overallMaxBaseKvarCalculated.value &&
+                            new Date(r.datetime) < new Date(overallMaxBaseKvarCalculated.datetime))) {
+                        overallMaxBaseKvarCalculated.value = currentCalculatedKvarBase;
+                        overallMaxBaseKvarCalculated.datetime = r.datetime;
                     }
                 }
-                // --- END: Update MAX RAW values ---
 
+                const currentWh = whCalculation(rawWh);
+                const currentVarh = varhCalculation(rawVarh);
 
-                // Calculate currentWh and currentVarh for individual table display
-                const currentWh = whCalculation(rawWh); // Pass rawWh to calculation
-                const currentVarh = varhCalculation(rawVarh); // Pass rawVarh to calculation
-
-                // --- HERE IS THE KEY CHANGE FOR TABLE DISPLAY ---
                 let displayWhInTable, displayVarhInTable;
-                if (unitType === 'kw_kvar') {
-                    // สำหรับ kW/kVar ในตาราง ให้ปัดเป็น 6 ตำแหน่ง
-                    displayWhInTable = currentWh.toFixed(decimalPlacesForKwKvarTable);
-                    displayVarhInTable = currentVarh.toFixed(decimalPlacesForKwKvarTable);
-                } else {
-                    // สำหรับ kWh/kVarh ในตาราง ยังคงปัดตาม decimalPlacesForSummary (ซึ่งคือ 2)
-                    displayWhInTable = currentWh.toFixed(decimalPlacesForSummary);
-                    displayVarhInTable = currentVarh.toFixed(decimalPlacesForSummary);
+                displayWhInTable = currentWh.toFixed(decimalPlacesForTable);
+                displayVarhInTable = currentVarh.toFixed(decimalPlacesForTable);
 
-                    // Update total consumption (these are already calculated with multiplier if checked)
+
+                if (unitType === 'kwh_kvarh') {
+                    const rate = getRate(r.dateObject);
                     totalWhConsumption[rate] += currentWh;
                     totalVarhConsumption[rate] += currentVarh;
                 }
 
-
-                let displayDatetime = r.datetime; // This is already formatted from process()
-                const cls = rate.toLowerCase().replace('-', '');
+                let displayDatetime = r.datetime;
+                const cls = getRate(r.dateObject).toLowerCase().replace('-', '');
                 tableRowsHtml += `<tr class="${cls}">
-            <td>${displayDatetime}</td><td>${rate}</td>
+            <td>${displayDatetime}</td><td>${getRate(r.dateObject)}</td>
             <td>${displayWhInTable}</td><td>${displayVarhInTable}</td>
         </tr>`;
             });
 
             let mainSummaryHtml = '';
 
-            // Start of Rate Summary Container
             mainSummaryHtml += '<div class="rate-summary-container">';
 
-            // Summary box based on unitType
             if (unitType === 'kw_kvar') {
-                // --- START: Calculate final kW/kVar for display using max RAW values ---
-                // ONLY HERE DO WE APPLY whCalculation/varhCalculation TO THE MAX RAW VALUES
-                // และปัดทศนิยมตาม decimalPlacesForSummary (ซึ่งคือ 3)
-                const displayOverallMaxKw = whCalculation(overallMaxRawWh.value).toFixed(decimalPlacesForSummary);
-                const displayOverallMaxKvar = varhCalculation(overallMaxRawVarh.value).toFixed(decimalPlacesForSummary);
+                const displayOverallMaxKw = customRound(overallMaxBaseKwCalculated.value * currentMultiplier, decimalPlacesForSummary);
+                const displayOverallMaxKvar = customRound(overallMaxBaseKvarCalculated.value * currentMultiplier, decimalPlacesForSummary);
 
-                const displayPeakMaxKw = whCalculation(maxRawWhValues['Peak'].value).toFixed(decimalPlacesForSummary);
-                const displayPeakMaxKvar = varhCalculation(maxRawVarhValues['Peak'].value).toFixed(decimalPlacesForSummary);
+                // For individual rate max kW/kVar, we now get the data from the 'monthlyMaxValues' global variable
+                // which has been populated by calculateAllMonthsSummariesAndMaxes based on the selected AR type.
+                // We need to filter this data further by 'selectedMonthYear' for this specific summary box.
+                let displayPeakMaxKw = 'N/A';
+                let displayPeakMaxKvar = 'N/A';
+                let displayOffPeakMaxKw = 'N/A';
+                let displayOffPeakMaxKvar = 'N/A';
+                let displayHolidayMaxKw = 'N/A';
+                let displayHolidayMaxKvar = 'N/A';
 
-                const displayOffPeakMaxKw = whCalculation(maxRawWhValues['Off-peak'].value).toFixed(decimalPlacesForSummary);
-                const displayOffPeakMaxKvar = varhCalculation(maxRawVarhValues['Off-peak'].value).toFixed(decimalPlacesForSummary);
-
-                const displayHolidayMaxKw = whCalculation(maxRawWhValues['Holiday'].value).toFixed(decimalPlacesForSummary);
-                const displayHolidayMaxKvar = varhCalculation(maxRawVarhValues['Holiday'].value).toFixed(decimalPlacesForSummary);
-                // --- END: Calculate final kW/kVar for display using max RAW values ---
+                if (selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear]) {
+                    const currentMonthMaxData = monthlyMaxValues[selectedMonthYear];
+                    if (currentMonthMaxData['Peak']) {
+                        // Values in monthlyMaxValues are already multiplied by now, so no need for currentMultiplier here
+                        displayPeakMaxKw = customRound(currentMonthMaxData['Peak'].wh, decimalPlacesForSummary);
+                        displayPeakMaxKvar = customRound(currentMonthMaxData['Peak'].varh, decimalPlacesForSummary);
+                    }
+                    if (currentMonthMaxData['Off-peak']) {
+                        displayOffPeakMaxKw = customRound(currentMonthMaxData['Off-peak'].wh, decimalPlacesForSummary);
+                        displayOffPeakMaxKvar = customRound(currentMonthMaxData['Off-peak'].varh, decimalPlacesForSummary);
+                    }
+                    if (currentMonthMaxData['Holiday']) {
+                        displayHolidayMaxKw = customRound(currentMonthMaxData['Holiday'].wh, decimalPlacesForSummary);
+                        displayHolidayMaxKvar = customRound(currentMonthMaxData['Holiday'].varh, decimalPlacesForSummary);
+                    }
+                }
 
 
                 mainSummaryHtml += `
             <div class="summary-box overall-max-summary">
                 <h3>kW/kVar สูงสุดรวมทุกเรท</h3>
-                <p>kW: <strong>${displayOverallMaxKw} ${whUnit}</strong><br>
-                <small>เมื่อ: ${overallMaxRawWh.datetime || 'N/A'}</small></p>
-                <p>kVar: <strong>${displayOverallMaxKvar} ${varhUnit}</strong><br>
-                <small>เมื่อ: ${overallMaxRawVarh.datetime || 'N/A'}</small></p>
+                <p>kW: <strong>${displayOverallMaxKw.toFixed(decimalPlacesForSummary)} ${whUnit}</strong><br>
+                <small>เมื่อ: ${overallMaxBaseKwCalculated.datetime || 'N/A'}</small></p>
+                <p>kVar: <strong>${displayOverallMaxKvar.toFixed(decimalPlacesForSummary)} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${overallMaxBaseKvarCalculated.datetime || 'N/A'}</small></p>
             </div>
             <div class="summary-box max-kw-peak-summary">
                 <h3>kW/kVar สูงสุด (Peak)</h3>
-                <p>kW: <strong>${displayPeakMaxKw} ${whUnit}</strong><br>
-                <small>เมื่อ: ${maxRawWhValues['Peak'].datetime || 'N/A'}</small></p>
-                <p>kVar: <strong>${displayPeakMaxKvar} ${varhUnit}</strong><br>
-                <small>เมื่อ: ${maxRawVarhValues['Peak'].datetime || 'N/A'}</small></p>
+                <p>kW: <strong>${displayPeakMaxKw !== 'N/A' ? displayPeakMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Peak'] ? monthlyMaxValues[selectedMonthYear]['Peak'].wh_datetime : 'N/A'}</small></p>
+                <p>kVar: <strong>${displayPeakMaxKvar !== 'N/A' ? displayPeakMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Peak'] ? monthlyMaxValues[selectedMonthYear]['Peak'].varh_datetime : 'N/A'}</small></p>
             </div>
             <div class="summary-box max-kw-off-peak-summary">
                 <h3>kW/kVar สูงสุด (Off-peak)</h3>
-                <p>kW: <strong>${displayOffPeakMaxKw} ${whUnit}</strong><br>
-                <small>เมื่อ: ${maxRawWhValues['Off-peak'].datetime || 'N/A'}</small></p>
-                <p>kVar: <strong>${displayOffPeakMaxKvar} ${varhUnit}</strong><br>
-                <small>เมื่อ: ${maxRawVarhValues['Off-peak'].datetime || 'N/A'}</small></p>
+                <p>kW: <strong>${displayOffPeakMaxKw !== 'N/A' ? displayOffPeakMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Off-peak'] ? monthlyMaxValues[selectedMonthYear]['Off-peak'].wh_datetime : 'N/A'}</small></p>
+                <p>kVar: <strong>${displayOffPeakMaxKvar !== 'N/A' ? displayOffPeakMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Off-peak'] ? monthlyMaxValues[selectedMonthYear]['Off-peak'].varh_datetime : 'N/A'}</small></p>
             </div>
             <div class="summary-box max-kw-holiday-summary">
                 <h3>kW/kVar สูงสุด (Holiday)</h3>
-                <p>kW: <strong>${displayHolidayMaxKw} ${whUnit}</strong><br>
-                <small>เมื่อ: ${maxRawWhValues['Holiday'].datetime || 'N/A'}</small></p>
-                <p>kVar: <strong>${displayHolidayMaxKvar} ${varhUnit}</strong><br>
-                <small>เมื่อ: ${maxRawVarhValues['Holiday'].datetime || 'N/A'}</small></p>
+                <p>kW: <strong>${displayHolidayMaxKw !== 'N/A' ? displayHolidayMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].wh_datetime : 'N/A'}</small></p>
+                <p>kVar: <strong>${displayHolidayMaxKvar !== 'N/A' ? displayHolidayMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
+                <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].varh_datetime : 'N/A'}</small></p>
             </div>
         `;
-            } else { // If unitType is kWh/kVarh, show total consumption summaries
+            } else {
                 mainSummaryHtml += `
             <div class="summary-box consumption-summary">
                 <h3>สรุปการใช้พลังงาน (รวม)</h3>
@@ -921,7 +880,7 @@
         `;
             }
 
-            mainSummaryHtml += '</div>'; // End of Rate Summary Container
+            mainSummaryHtml += '</div>';
 
             const headers = [{
                 title: 'วันเวลา',
@@ -947,19 +906,15 @@
 
             let tableHtml = `<h2 class="section-title">ข้อมูลราย 15 นาที</h2><table><tr>${headerHtml}</tr>${tableRowsHtml}</table>`;
 
-            // Returning the HTML string directly
             return mainSummaryHtml + tableHtml;
         }
 
 
         async function process() {
-            // *** เพิ่มการตรวจสอบสถานะการประมวลผล ***
             if (isProcessed) {
                 console.log("File already processed. Skipping re-processing.");
-                // คุณอาจแสดงข้อความแจ้งเตือนผู้ใช้ที่นี่ เช่น alert("ไฟล์ได้ถูกประมวลผลไปแล้ว")
                 return;
             }
-            // **********************************
 
             collectHolidays();
             const file = excelFileInput.files[0];
@@ -968,7 +923,7 @@
                 return;
             }
 
-            dropArea.innerHTML = `<span class="icon" style="color: #28a745;">✅</span><p>ไฟล์ที่เลือก: <strong>${file.name}</strong></p><p>กำลังประมวลผล...</p>`;
+            dropArea.innerHTML = `<span class="icon" style="color: #28a745;">✅</span><p>ไฟล์ที่เลือก: <strong>${file.name}</strong></p>`;
             document.getElementById('output').innerHTML = '<p>กำลังประมวลผลไฟล์...</p>';
 
 
@@ -981,15 +936,10 @@
                 });
                 const sheet = wb.Sheets[wb.SheetNames[0]];
 
-                // ตรวจสอบโครงสร้างไฟล์ Excel
-                // อ่าน header row เพื่อระบุประเภทของไฟล์
-                // สมมติว่า header อยู่ที่แถวแรก (index 0) สำหรับไฟล์ 3 คอลัมน์
-                // และอยู่ที่แถวที่ 3 (index 2) สำหรับไฟล์แบบเต็ม
-                let startRowForData = 3; // Default for existing structure
+                let startRowForData = 3;
                 let rawDateCol, whCol, varhCol;
                 let isCompactFormat = false;
 
-                // Attempt to read headers from row 1 (0-indexed) for the compact format
                 const headerRowCompact = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 'A1:C1' })[0];
                 console.log("Header row for compact check:", headerRowCompact);
 
@@ -1000,22 +950,20 @@
 
                     console.log("Detected compact format (3 columns).");
                     isCompactFormat = true;
-                    startRowForData = 1; // Data starts from row 2 (index 1) for compact format
-                    rawDateCol = 0; // Column A
-                    whCol = 1;      // Column B
-                    varhCol = 2;    // Column C
+                    startRowForData = 1;
+                    rawDateCol = 0;
+                    whCol = 1;
+                    varhCol = 2;
 
-                    // สำหรับไฟล์ 3 คอลัมน์ จะไม่มี meterNumber และ multiplier ในตำแหน่งเดิม
-                    // ตั้งค่าเป็น N/A หรือ 0 ไปก่อน หรืออาจจะต้องหาตำแหน่งใหม่ถ้ามีข้อมูลนี้
                     meterNumber = 'N/A (Compact File)';
-                    multiplier = 1; // หรือค่าเริ่มต้นอื่นๆ ที่เหมาะสมสำหรับไฟล์ประเภทนี้
+                    multiplier = 1;
                 } else {
                     console.log("Detected standard format.");
                     isCompactFormat = false;
-                    startRowForData = 3; // Data starts from row 4 (index 3) for standard format
-                    rawDateCol = 2;  // Column C
-                    whCol = 26;      // Column AA
-                    varhCol = 34;    // Column AI
+                    startRowForData = 3;
+                    rawDateCol = 2;
+                    whCol = 26;
+                    varhCol = 34;
 
                     if (sheet['A4'] && sheet['A4'].v !== undefined) {
                         meterNumber = sheet['A4'].v.toString();
@@ -1041,10 +989,7 @@
                 });
 
                 globalResults = [];
-                isProcessed = false; // *** รีเซ็ตสถานะก่อนเริ่มประมวลผลข้อมูลใหม่ ***
-                monthlySummaries = {}; // Reset monthly summaries when a new file is processed
-                monthlyMaxValues = {}; // Reset monthly max values as well
-
+                isProcessed = false;
 
                 for (let i = startRowForData; i < rows.length; i++) {
                     const rawDate = rows[i][rawDateCol];
@@ -1053,25 +998,20 @@
 
                     if (!rawDate || isNaN(originalWhValue) || isNaN(originalVarhValue)) continue;
 
-                    // *** ใช้ฟังก์ชัน helper ใหม่ในการแปลงวันที่จาก Excel ***
                     let dateObjectBKK = convertExcelDateToBKKUTCAdjusted(rawDate);
-                    if (!dateObjectBKK) continue; // ถ้าแปลงไม่ได้ ให้ข้าม row นี้ไป
+                    if (!dateObjectBKK) continue;
 
-                    // Rounding to nearest 15-minute interval for dateObjectBKK (ซึ่งตอนนี้ถูกปรับให้เป็น UTC-adjusted BKK แล้ว)
                     const totalMinutesFromBKKMidnight = dateObjectBKK.getUTCHours() * 60 + dateObjectBKK.getUTCMinutes() + dateObjectBKK.getUTCSeconds() / 60;
                     const roundedTotalMinutesBKK = Math.round(totalMinutesFromBKKMidnight / 15) * 15;
 
-                    // Create the final roundedDateObjectUTC with the correct BKK time in its UTC components
                     const roundedDateObjectUTC = new Date(Date.UTC(
                         dateObjectBKK.getUTCFullYear(),
                         dateObjectBKK.getUTCMonth(),
                         dateObjectBKK.getUTCDate(),
-                        0, // Start from midnight BKK (which is now in UTC components)
+                        0,
                         roundedTotalMinutesBKK,
                         0, 0
                     ));
-                    // No additional setUTCHours adjustment needed here as the previous steps ensured
-                    // that roundedDateObjectUTC has its UTC components representing the desired BKK time.
 
                     const displayBkkComponents = getBKKTimeComponents(roundedDateObjectUTC);
                     const formattedDatetime = `${displayBkkComponents.year}/${(displayBkkComponents.month + 1).toString().padStart(2, '0')}/${displayBkkComponents.day.toString().padStart(2, '0')} ${displayBkkComponents.hour.toString().padStart(2, '0')}:${displayBkkComponents.minute.toString().padStart(2, '0')}:00`;
@@ -1080,54 +1020,16 @@
                         datetime: formattedDatetime,
                         originalWhValue: originalWhValue,
                         originalVarhValue: originalVarhValue,
-                        dateObject: roundedDateObjectUTC // This is the UTC-adjusted BKK time
+                        dateObject: roundedDateObjectUTC
                     });
-
-                    // --- START: NEW MONTHLY SUMMARY CALCULATION (STORE RAW VALUES) ---
-                    const monthKey = `${displayBkkComponents.year}-${(displayBkkComponents.month + 1).toString().padStart(2, '0')}`;
-                    const rate = getRate(roundedDateObjectUTC); // Use the rounded date object for rate
-
-                    // Initialize structures for this month if they don't exist
-                    if (!monthlySummaries[monthKey]) {
-                        monthlySummaries[monthKey] = {
-                            'Peak': { wh: 0, varh: 0 },
-                            'Off-peak': { wh: 0, varh: 0 },
-                            'Holiday': { wh: 0, varh: 0 }
-                        };
-                    }
-                    if (!monthlyMaxValues[monthKey]) {
-                        monthlyMaxValues[monthKey] = {
-                            'Peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
-                            'Off-peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
-                            'Holiday': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' }
-                        };
-                    }
-
-                    // Accumulate RAW kWh and kVarh totals
-                    monthlySummaries[monthKey][rate].wh += (originalWhValue / 1000); // Store raw kWh
-                    monthlySummaries[monthKey][rate].varh += (originalVarhValue / 1000); // Store raw kVarh
-
-                    // Update max RAW kW and kVar values for the rate
-                    const kW_raw = (originalWhValue * 4 / 1000); // kW is derived by multiplying by 4 (since it's a 15-min interval)
-                    const kVar_raw = (originalVarhValue * 4 / 1000); // kVar is derived by multiplying by 4 (since it's a 15-min interval)
-
-                    if (kW_raw > monthlyMaxValues[monthKey][rate].wh) {
-                        monthlyMaxValues[monthKey][rate].wh = kW_raw;
-                        monthlyMaxValues[monthKey][rate].wh_datetime = formattedDatetime;
-                    }
-                    if (kVar_raw > monthlyMaxValues[monthKey][rate].varh) {
-                        monthlyMaxValues[monthKey][rate].varh = kVar_raw;
-                        monthlyMaxValues[monthKey][rate].varh_datetime = formattedDatetime;
-                    }
-                    // --- END: NEW MONTHLY SUMMARY CALCULATION ---
                 }
 
-                isProcessed = true; // ตั้งค่าเป็น true เมื่อประมวลผลเสร็จสิ้น
+                isProcessed = true;
                 sortState.columnIndex = null;
                 sortState.direction = 'asc';
 
-                populateMonthYearSelector(); // Populate the Month/Year selector
-                updateDisplay(); // Initial display
+                populateMonthYearSelector();
+                updateDisplay();
             };
             reader.readAsArrayBuffer(file);
         }
@@ -1143,16 +1045,24 @@
             console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}`);
 
             const outputDiv = document.getElementById('output');
-            outputDiv.innerHTML = ''; // Clear previous content
+            outputDiv.innerHTML = '';
+
+            // MODIFIED: Calculate monthly summaries and max values FOR ALL MONTHS, based on selected AR Type
+            const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
+                calculateAllMonthsSummariesAndMaxes(selectedArType);
+
+            // Update global variables with the calculated data for the current selection
+            monthlySummaries = calculatedMonthlySummaries;
+            monthlyMaxValues = calculatedMonthlyMaxValues;
+
 
             // Render monthly summary table first
-            outputDiv.innerHTML += renderMonthlySummaryTable(); // Append the monthly summary
+            // Pass the calculated monthly summaries and max values (which now contain ALL months filtered by selected AR type)
+            outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues);
 
-            // Create a wrapper for the summary boxes to make layout easier
             const summaryBoxWrapper = document.createElement('div');
             summaryBoxWrapper.className = 'summary-box-wrapper';
 
-            // Add Meter Info
             const formattedMultiplier = multiplier.toLocaleString('en-US', {
                 minimumFractionDigits: 4,
                 maximumFractionDigits: 4
@@ -1165,14 +1075,13 @@
                 </div>`;
             summaryBoxWrapper.innerHTML += meterInfoHtml;
 
-            // Add Billing Period Info
             const billingPeriodInfoDiv = document.createElement('div');
             billingPeriodInfoDiv.className = 'summary-box billing-period-info';
 
             if (selectedMonthYear !== 'all') {
                 const [yearStr, monthStr] = selectedMonthYear.split('-');
-                const selectedMonthInt = parseInt(monthStr); // 1-indexed
-                const selectedYearInt = parseInt(yearStr); // AD year
+                const selectedMonthInt = parseInt(monthStr);
+                const selectedYearInt = parseInt(yearStr);
 
                 const {
                     startDate,
@@ -1193,6 +1102,7 @@
 
                     billingPeriodInfoDiv.innerHTML = `
                         <h3>ช่วงเวลาบิลลิ่ง</h3>
+                        <p>สำหรับเดือนที่เลือก (${selectedMonthYear}):</p>
                         <p>ตั้งแต่: <strong>${formatDateTime(startDate)}</strong></p>
                         <p>ถึง: <strong>${formatDateTime(endDate)}</strong></p>
                     `;
@@ -1200,29 +1110,27 @@
                     console.warn("[updateDisplay] Could not calculate billing period dates for display.");
                     billingPeriodInfoDiv.innerHTML = `
                         <h3>ช่วงเวลาบิลลิ่ง</h3>
-                        <p>ไม่สามารถคำนวณช่วงเวลาบิลลิ่งได้</p>
+                        <p>ไม่สามารถคำนวณช่วงเวลาบิลลิ่งได้สำหรับเดือนที่เลือก</p>
                     `;
                 }
             } else {
                 billingPeriodInfoDiv.innerHTML = `
                     <h3>ช่วงเวลาบิลลิ่ง</h3>
                     <p>แสดงข้อมูลทั้งหมดที่มีในไฟล์</p>
+                    <p>ค่าในตารางสรุปรายเดือน คำนวณตามประเภท AR "${selectedArType}"</p>
                 `;
             }
             summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
 
 
-            // Append the summary box wrapper to the outputDiv
             outputDiv.appendChild(summaryBoxWrapper);
 
 
-            // Render the detailed results (rate summary and 15-min table)
             outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType);
 
-            updateExportButtonVisibility(); // Ensure the export button is visible after rendering
+            updateExportButtonVisibility();
         }
 
-        // Modified Export to Excel Function
         function exportTableToExcel() {
             if (!isProcessed) {
                 alert("กรุณาอัปโหลดไฟล์ Excel ก่อนทำการส่งออก");
@@ -1231,10 +1139,7 @@
 
             const unitType = document.getElementById('unitSelector').value;
             const applyMultiplier = document.getElementById('applyMultiplier').checked;
-            const currentMultiplier = applyMultiplier ? multiplier : 1;
-            const selectedMonthYear = document.getElementById('monthYearSelector').value;
-            const selectedArType = document.getElementById('arTypeSelector').value;
-
+            const currentMultiplierForDisplayOrExport = applyMultiplier ? multiplier : 1;
 
             let whUnit, varhUnit;
             let whCalculation, varhCalculation;
@@ -1243,85 +1148,73 @@
             if (unitType === 'kw_kvar') {
                 whUnit = 'kW';
                 varhUnit = 'kVar';
-                decimalPlaces = 6; // Keep 6 decimal places for kW/kVar export for precision
+                decimalPlaces = 3;
 
-                whCalculation = (wh_val) => {
-                    let baseKw = (parseFloat(wh_val) * 4 / 1000);
-                    if (applyMultiplier) {
-                        return baseKw * currentMultiplier;
-                    }
-                    return baseKw;
+                whCalculation = (wh_val_raw) => {
+                    const roundedWhTimesFour = Math.round(parseFloat(wh_val_raw) * 4);
+                    return customRound((roundedWhTimesFour * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
-                varhCalculation = (varh_val) => {
-                    let baseKvar = (parseFloat(varh_val) * 4 / 1000);
-                    if (applyMultiplier) {
-                        return baseKvar * currentMultiplier;
-                    }
-                    return baseKvar;
+                varhCalculation = (varh_val_raw) => {
+                    const roundedVarhTimesFour = Math.round(parseFloat(varh_val_raw) * 4);
+                    return customRound((roundedVarhTimesFour * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
             } else { // kWh, kVarh
                 whUnit = 'kWh';
                 varhUnit = 'kVarh';
-                decimalPlaces = 2; // Keep 2 decimal places for kWh/kVarh export
+                decimalPlaces = 2; // เปลี่ยนตรงนี้ให้เป็น 2
 
-                const roundToDecimal = (value, decimals) => {
-                    const factor = Math.pow(10, decimals);
-                    return Math.round(value * factor) / factor;
+                whCalculation = (wh_val_raw) => {
+                    return customRound((parseFloat(wh_val_raw) * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
 
-                whCalculation = (wh_val) => {
-                    const raw = (parseFloat(wh_val) / 1000);
-                    return roundToDecimal(raw * currentMultiplier, decimalPlaces);
-                };
-
-                varhCalculation = (varh_val) => {
-                    const raw = (parseFloat(varh_val) / 1000);
-                    return roundToDecimal(raw * currentMultiplier, decimalPlaces);
+                varhCalculation = (varh_val_raw) => {
+                    return customRound((parseFloat(varh_val_raw) * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
             }
 
             const dataToExport = [];
 
-            // Add header row
             dataToExport.push(['วันเวลา', 'เรท', whUnit, varhUnit]);
 
             let dataForExport = [];
+            const selectedMonthYear = document.getElementById('monthYearSelector').value;
+            const selectedArType = document.getElementById('arTypeSelector').value;
+
             if (selectedMonthYear === 'all') {
                 dataForExport = [...globalResults];
             } else {
                 const [yearStr, monthStr] = selectedMonthYear.split('-');
-                const selectedMonthInt = parseInt(monthStr); // 1-indexed
-                const selectedYearInt = parseInt(yearStr); // AD year
+                const selectedMonthInt = parseInt(monthStr);
+                const selectedYearInt = parseInt(yearStr);
 
                 dataForExport = globalResults.filter(r => {
                     return isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
                 });
             }
 
-            // Apply sorting if a sort state is active (same as renderResults)
             if (sortState.columnIndex !== null) {
                 const directionModifier = sortState.direction === 'asc' ? 1 : -1;
-                const selectedUnit = document.getElementById('unitSelector').value;
+                const selectedUnitForSort = document.getElementById('unitSelector').value;
                 const applyMultiplierForSort = document.getElementById('applyMultiplier').checked;
                 const currentMultiplierForSort = applyMultiplierForSort ? multiplier : 1;
 
                 let whUnitConverterForSort, varhUnitConverterForSort;
-                if (selectedUnit === 'kw_kvar') {
-                    whUnitConverterForSort = (wh) => (parseFloat(wh) * 4 / 1000) * currentMultiplierForSort; // Precise for sorting
-                    varhUnitConverterForSort = (varh) => (parseFloat(varh) * 4 / 1000) * currentMultiplierForSort; // Precise for sorting
+                if (selectedUnitForSort === 'kw_kvar') {
+                    whUnitConverterForSort = (wh_val) => (Math.round(parseFloat(wh_val) * 4) / 1000) * currentMultiplierForSort;
+                    varhUnitConverterForSort = (varh_val) => (Math.round(parseFloat(varh_val) * 4) / 1000) * currentMultiplierForSort;
                 } else {
-                    whUnitConverterForSort = (wh) => (parseFloat(wh) / 1000) * currentMultiplierForSort;
-                    varhUnitConverterForSort = (varh) => (parseFloat(varh) / 1000) * currentMultiplierForSort;
+                    whUnitConverterForSort = (wh_val) => (parseFloat(wh_val) / 1000) * currentMultiplierForSort;
+                    varhUnitConverterForSort = (varh_val) => (parseFloat(varh_val) / 1000) * currentMultiplierForSort;
                 }
 
-                dataForExport.sort((a, b) => { // Sort dataForExport, not filteredResults
+                dataForExport.sort((a, b) => {
                     let valA, valB;
                     switch (sortState.columnIndex) {
-                        case 0: // Datetime
+                        case 0:
                             valA = a.dateObject.getTime();
                             valB = b.dateObject.getTime();
                             break;
-                        case 1: // Rate
+                        case 1:
                             valA = getRate(a.dateObject);
                             valB = getRate(b.dateObject);
                             const rateOrder = {
@@ -1330,11 +1223,11 @@
                                 'Peak': 3
                             };
                             return (rateOrder[valA] - rateOrder[valB]) * directionModifier;
-                        case 2: // Wh/kW
+                        case 2:
                             valA = whUnitConverterForSort(a.originalWhValue);
                             valB = whUnitConverterForSort(b.originalWhValue);
                             break;
-                        case 3: // VARh/kVar
+                        case 3:
                             valA = varhUnitConverterForSort(a.originalVarhValue);
                             valB = varhUnitConverterForSort(b.originalVarhValue);
                             break;
@@ -1350,12 +1243,10 @@
                 });
             }
 
-            // Add data rows
             dataForExport.forEach(r => {
-                // Add this check to ensure 'r' and 'r.dateObject' are valid
                 if (!r || !r.dateObject) {
                     console.error("Skipping malformed data row during export:", r);
-                    return; // Skip this iteration if the data is not as expected
+                    return;
                 }
 
                 const wh = r.originalWhValue || 0;
@@ -1369,8 +1260,8 @@
                 dataToExport.push([
                     r.datetime,
                     rate,
-                    currentWh.toFixed(decimalPlaces), // Apply decimal places for export
-                    currentVarh.toFixed(decimalPlaces) // Apply decimal places for export
+                    currentWh.toFixed(decimalPlaces),
+                    currentVarh.toFixed(decimalPlaces)
                 ]);
             });
 
@@ -1385,7 +1276,6 @@
 
         document.getElementById('exportExcel').addEventListener('click', exportTableToExcel);
 
-        // Utility function to toggle export button visibility (could be expanded)
         function updateExportButtonVisibility() {
             const exportButton = document.getElementById('exportExcel');
             if (isProcessed && globalResults.length > 0) {
@@ -1394,7 +1284,7 @@
                 exportButton.style.display = 'none';
             }
         }
-        document.addEventListener('DOMContentLoaded', updateExportButtonVisibility); // Call on initial load
+        document.addEventListener('DOMContentLoaded', updateExportButtonVisibility);
     </script>
 </body>
 
