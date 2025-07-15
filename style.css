@@ -296,23 +296,30 @@ tbody tr:hover {
 
 /* Specific row styles based on rate */
 .peak {
-    background-color: #ffcccc; /* Light red */
-}
-.off-peak {
-    background-color: #ccffcc; /* Light green */
-}
-.holiday {
-    background-color: #ccccff; /* Light blue */
+    background-color: #ffe0e0; /* Red for Peak */
 }
 
+.offpeak {
+    background-color: #e0f2f7; /* Blue for Off-peak */
+}
+
+.holiday {
+    background-color: #e6ffe6; /* Green for Holiday */
+}
+
+/* สำหรับเรท Peak */
 .peak:hover {
-    background-color: #ffb3b3;
+    background-color: #ffb3b3; /* สีแดงอ่อนลงเมื่อโฮเวอร์ */
 }
-.off-peak:hover {
-    background-color: #b3ffb3;
+
+/* สำหรับเรท Off-peak */
+.offpeak:hover { /* ใช้ .offpeak ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
+    background-color: #b3d9ff; /* สีฟ้าอ่อนลงเมื่อโฮเวอร์ (ปรับจากสีเขียวในคำขอเดิมให้เข้ากับสีฟ้าของ offpeak) */
 }
-.holiday:hover {
-    background-color: #b3b3ff;
+
+/* สำหรับเรท Holiday */
+.holiday:hover { /* ใช้ .holiday ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
+    background-color: #cce0cc; /* สีเขียวอ่อนลงเมื่อโฮเวอร์ */
 }
 
 /* --- New Button Styles (General & Export Specific) --- */
