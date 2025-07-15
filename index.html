@@ -404,7 +404,7 @@
 
             } else {
                 let prevReadingMonth = selectedMonth - 1;
-                let prevReadingYear = selectedYear;
+                let prevReadingYear = targetYear;
                 if (prevReadingMonth === 0) {
                     prevReadingMonth = 12;
                     prevReadingYear--;
@@ -455,6 +455,9 @@
             const applyMultiplierForSummaryCalculation = document.getElementById('applyMultiplier').checked;
             const currentMultiplierForSummaryCalculation = applyMultiplierForSummaryCalculation ? multiplier : 1;
 
+            const decimalPlacesForKwhSummary = 2; // Define decimal places for kWh/kVarh here
+            const decimalPlacesForKwSummary = 3; // Define decimal places for kW/kVar here
+
             globalResults.forEach(r => {
                 const originalWhValue = r.originalWhValue || 0;
                 const originalVarhValue = r.originalVarhValue || 0;
@@ -492,15 +495,16 @@
                     }
 
                     // Apply multiplier here if checkbox is checked for the summary calculation
-                    const kWh_calculated_base_for_sum = (originalWhValue * currentMultiplierForSummaryCalculation / 1000);
-                    const kVarh_calculated_base_for_sum = (originalVarhValue * currentMultiplierForSummaryCalculation / 1000);
+                    // Apply customRound here
+                    const kWh_calculated_base_for_sum = customRound((originalWhValue * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwhSummary);
+                    const kVarh_calculated_base_for_sum = customRound((originalVarhValue * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwhSummary);
 
                     calculatedMonthlySummaries[dataPointMonthKey][rate].wh += kWh_calculated_base_for_sum;
                     calculatedMonthlySummaries[dataPointMonthKey][rate].varh += kVarh_calculated_base_for_sum;
 
                     // kW and kVar max calculation also needs the multiplier applied consistently
-                    const kW_calculated_base = (Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000);
-                    const kVar_calculated_base = (Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000);
+                    const kW_calculated_base = customRound((Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
+                    const kVar_calculated_base = customRound((Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
 
 
                     if (kW_calculated_base > calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh ||
@@ -846,21 +850,21 @@
                 <p>kVar: <strong>${displayOverallMaxKvar.toFixed(decimalPlacesForSummary)} ${varhUnit}</strong><br>
                 <small>เมื่อ: ${overallMaxBaseKvarCalculated.datetime || 'N/A'}</small></p>
             </div>
-            <div class="summary-box max-kw-peak-summary">
+            <div class="summary-box max-kw-peak-summary summary-peak">
                 <h3>kW/kVar สูงสุด (Peak)</h3>
                 <p>kW: <strong>${displayPeakMaxKw !== 'N/A' ? displayPeakMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Peak'] ? monthlyMaxValues[selectedMonthYear]['Peak'].wh_datetime : 'N/A'}</small></p>
                 <p>kVar: <strong>${displayPeakMaxKvar !== 'N/A' ? displayPeakMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Peak'] ? monthlyMaxValues[selectedMonthYear]['Peak'].varh_datetime : 'N/A'}</small></p>
             </div>
-            <div class="summary-box max-kw-off-peak-summary">
+            <div class="summary-box max-kw-off-peak-summary summary-off-peak">
                 <h3>kW/kVar สูงสุด (Off-peak)</h3>
                 <p>kW: <strong>${displayOffPeakMaxKw !== 'N/A' ? displayOffPeakMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Off-peak'] ? monthlyMaxValues[selectedMonthYear]['Off-peak'].wh_datetime : 'N/A'}</small></p>
                 <p>kVar: <strong>${displayOffPeakMaxKvar !== 'N/A' ? displayOffPeakMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Off-peak'] ? monthlyMaxValues[selectedMonthYear]['Off-peak'].varh_datetime : 'N/A'}</small></p>
             </div>
-            <div class="summary-box max-kw-holiday-summary">
+            <div class="summary-box max-kw-holiday-summary summary-holiday">
                 <h3>kW/kVar สูงสุด (Holiday)</h3>
                 <p>kW: <strong>${displayHolidayMaxKw !== 'N/A' ? displayHolidayMaxKw.toFixed(decimalPlacesForSummary) : 'N/A'} ${whUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].wh_datetime : 'N/A'}</small></p>

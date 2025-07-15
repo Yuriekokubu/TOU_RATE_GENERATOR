@@ -392,3 +392,18 @@ tbody tr:hover {
         font-size: 0.9em;
     }
 }
+
+.summary-box.summary-peak {
+    background-color: #ffe0e0; /* A shade of red for Peak */
+    border: 1px solid #ff4d4d;
+}
+
+.summary-box.summary-off-peak {
+    background-color: #e0f2f7; /* A shade of blue for Off-peak */
+    border: 1px solid #4da6ff;
+}
+
+.summary-box.summary-holiday {
+    background-color: #e6ffe6; /* A shade of green for Holiday */
+    border: 1px solid #66cc66;
+}
