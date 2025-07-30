@@ -321,7 +321,7 @@
                 billingPeriodEndDate.setUTCMinutes(0);
                 billingPeriodEndDate.setUTCSeconds(0);
             }
-
+            // console.log(`Checking date: ${dateObject.toISOString()} against period: ${billingPeriodStartDate.toISOString()} to ${billingPeriodEndDate.toISOString()}`);
             return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() <= billingPeriodEndDate.getTime();
         }
 
@@ -383,6 +383,7 @@
             });
 
             if (sortedUniqueMonthYears.length > 0) {
+                // Set default to the latest month available
                 selector.value = sortedUniqueMonthYears[sortedUniqueMonthYears.length - 1];
             }
         }
@@ -404,7 +405,7 @@
 
             } else {
                 let prevReadingMonth = selectedMonth - 1;
-                let prevReadingYear = selectedYear; // Corrected: Use selectedYear here
+                let prevReadingYear = selectedYear;
                 if (prevReadingMonth === 0) {
                     prevReadingMonth = 12;
                     prevReadingYear--;
@@ -446,79 +447,87 @@
         }
 
 
-        // MODIFIED: New function to calculate monthly summaries and max values FOR ALL MONTHS, based on selected AR Type
         function calculateAllMonthsSummariesAndMaxes(selectedArType) {
             const calculatedMonthlySummaries = {};
             const calculatedMonthlyMaxValues = {};
 
-            // Get the current state of the multiplier checkbox
             const applyMultiplierForSummaryCalculation = document.getElementById('applyMultiplier').checked;
             const currentMultiplierForSummaryCalculation = applyMultiplierForSummaryCalculation ? multiplier : 1;
 
-            const decimalPlacesForKwhSummary = 2; // Define decimal places for kWh/kVarh here
-            const decimalPlacesForKwSummary = 3; // Define decimal places for kW/kVar here
+            const decimalPlacesForKwSummary = 3;
 
+            // First, determine all unique billing months present in the data for the selected AR type
+            const uniqueBillingMonthYears = new Set();
             globalResults.forEach(r => {
-                const originalWhValue = r.originalWhValue || 0;
-                const originalVarhValue = r.originalVarhValue || 0;
-                const dateObjectBKK = r.dateObject; // This is the UTC-adjusted BKK time
+                // For each data point, determine which billing period it *could* belong to.
+                // This is a bit tricky since one data point's calendar month might be different from its billing month.
+                // We need to iterate through possible target months.
+                // A simpler approach for this summary calculation is to find all unique (year, month) pairs for the *data points themselves*,
+                // then for each of those calendar months, figure out its billing period, and aggregate.
+                // However, the `isInBillingPeriod` function already takes `targetMonth` and `targetYear`.
+                // So, let's iterate through all *actual calendar months* present in the data.
+                const bkkComponents = getBKKTimeComponents(r.dateObject);
+                const calendarMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
+                uniqueBillingMonthYears.add(calendarMonthKey);
+            });
 
-                // Determine the month key for this data point based on its actual BKK time
-                const bkkComponents = getBKKTimeComponents(dateObjectBKK);
-                const dataPointMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
+            // Now, for each unique calendar month found in the data, calculate its billing period summary
+            // This ensures that each "billing month" in the summary table corresponds to a distinct billing period.
+            Array.from(uniqueBillingMonthYears).sort().forEach(monthKey => {
+                const [yearStr, monthStr] = monthKey.split('-');
+                const targetYear = parseInt(yearStr);
+                const targetMonth = parseInt(monthStr); // 1-indexed
 
-                // The crucial change: for each data point, determine *its* billing period based on its OWN month/year
-                // and the CURRENTLY SELECTED arType.
-                const targetMonthForDataPoint = bkkComponents.month + 1; // 1-indexed
-                const targetYearForDataPoint = bkkComponents.year;
+                const { startDate, endDate } = getBillingPeriodDates(targetYear, targetMonth, selectedArType);
 
-                // Check if the data point falls within its *own* billing period as defined by the selectedArType
-                const isWithinDataPointBillingPeriod = isInBillingPeriod(dateObjectBKK, selectedArType, targetMonthForDataPoint, targetYearForDataPoint);
-
-                if (isWithinDataPointBillingPeriod) {
-                    const rate = getRate(dateObjectBKK);
-
-                    // Initialize structures for this month if they don't exist
-                    if (!calculatedMonthlySummaries[dataPointMonthKey]) {
-                        calculatedMonthlySummaries[dataPointMonthKey] = {
-                            'Peak': { wh: 0, varh: 0 },
-                            'Off-peak': { wh: 0, varh: 0 },
-                            'Holiday': { wh: 0, varh: 0 }
-                        };
-                    }
-                    if (!calculatedMonthlyMaxValues[dataPointMonthKey]) {
-                        calculatedMonthlyMaxValues[dataPointMonthKey] = {
-                            'Peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
-                            'Off-peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
-                            'Holiday': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' }
-                        };
-                    }
-
-                    // *** MODIFIED: Store sums in Wh (after multiplier), conversion to kWh and rounding to 2 decimals happens at render time ***
-                    const wh_sum_value = (originalWhValue * currentMultiplierForSummaryCalculation);
-                    const varh_sum_value = (originalVarhValue * currentMultiplierForSummaryCalculation);
-
-                    calculatedMonthlySummaries[dataPointMonthKey][rate].wh += wh_sum_value;
-                    calculatedMonthlySummaries[dataPointMonthKey][rate].varh += varh_sum_value;
-
-                    // kW and kVar max calculation also needs the multiplier applied consistently
-                    const kW_calculated_base = customRound((Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
-                    const kVar_calculated_base = customRound((Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
-
-
-                    if (kW_calculated_base > calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh ||
-                        (kW_calculated_base === calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh &&
-                            new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh_datetime))) {
-                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh = kW_calculated_base;
-                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].wh_datetime = r.datetime;
-                    }
-                    if (kVar_calculated_base > calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh ||
-                        (kVar_calculated_base === calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh &&
-                            new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh_datetime))) {
-                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh = kVar_calculated_base;
-                        calculatedMonthlyMaxValues[dataPointMonthKey][rate].varh_datetime = r.datetime;
-                    }
+                if (!startDate || !endDate) {
+                    console.warn(`Skipping summary for ${monthKey} due to invalid billing period dates.`);
+                    return;
                 }
+
+                // Initialize summary and max values for this billing month
+                calculatedMonthlySummaries[monthKey] = {
+                    'Peak': { wh: 0, varh: 0 },
+                    'Off-peak': { wh: 0, varh: 0 },
+                    'Holiday': { wh: 0, varh: 0 }
+                };
+                calculatedMonthlyMaxValues[monthKey] = {
+                    'Peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
+                    'Off-peak': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' },
+                    'Holiday': { wh: 0, varh: 0, wh_datetime: '', varh_datetime: '' }
+                };
+
+                globalResults.forEach(r => {
+                    const dateObjectBKK = r.dateObject;
+                    // Check if this data point falls within the *current billing period* being processed
+                    if (dateObjectBKK.getTime() >= startDate.getTime() && dateObjectBKK.getTime() <= endDate.getTime()) {
+                        const originalWhValue = r.originalWhValue || 0;
+                        const originalVarhValue = r.originalVarhValue || 0;
+                        const rate = getRate(dateObjectBKK);
+
+                        const wh_sum_value = (originalWhValue * currentMultiplierForSummaryCalculation);
+                        const varh_sum_value = (originalVarhValue * currentMultiplierForSummaryCalculation);
+
+                        calculatedMonthlySummaries[monthKey][rate].wh += wh_sum_value;
+                        calculatedMonthlySummaries[monthKey][rate].varh += varh_sum_value;
+
+                        const kW_calculated_base = customRound((Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
+                        const kVar_calculated_base = customRound((Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
+
+                        if (kW_calculated_base > calculatedMonthlyMaxValues[monthKey][rate].wh ||
+                            (kW_calculated_base === calculatedMonthlyMaxValues[monthKey][rate].wh &&
+                                new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[monthKey][rate].wh_datetime))) {
+                            calculatedMonthlyMaxValues[monthKey][rate].wh = kW_calculated_base;
+                            calculatedMonthlyMaxValues[monthKey][rate].wh_datetime = r.datetime;
+                        }
+                        if (kVar_calculated_base > calculatedMonthlyMaxValues[monthKey][rate].varh ||
+                            (kVar_calculated_base === calculatedMonthlyMaxValues[monthKey][rate].varh &&
+                                new Date(r.datetime) < new Date(calculatedMonthlyMaxValues[monthKey][rate].varh_datetime))) {
+                            calculatedMonthlyMaxValues[monthKey][rate].varh = kVar_calculated_base;
+                            calculatedMonthlyMaxValues[monthKey][rate].varh_datetime = r.datetime;
+                        }
+                    }
+                });
             });
 
             return { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues };
@@ -526,8 +535,6 @@
 
 
         function renderMonthlySummaryTable(monthlySummariesToRender, monthlyMaxValuesToRender) {
-            // Note: This function now expects 'monthlySummariesToRender' to contain all months relevant to the file,
-            // with values filtered by the currently selected AR type.
             if (!isProcessed || Object.keys(monthlySummariesToRender).length === 0) {
                 return `
                     <div class="summary-section">
@@ -563,12 +570,13 @@
             `;
 
             const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-            const sortedMonthKeys = Object.keys(monthlySummariesToRender).sort();
+            const sortedMonthKeys = Object.keys(monthlySummariesToRender).sort((a, b) => {
+                const [yearA, monthA] = a.split('-').map(Number);
+                const [yearB, monthB] = b.split('-').map(Number);
+                if (yearA !== yearB) return yearA - yearB;
+                return monthA - monthB;
+            }); // Sort ascending by year then month
 
-            const applyMultiplierCheckbox = document.getElementById('applyMultiplier');
-            const applyMultiplierToSummary = applyMultiplierCheckbox ? applyMultiplierCheckbox.checked : false;
-            // Removed currentMultiplierForSummary as it's no longer needed here.
-            // The values in monthlySummariesToRender are ALREADY multiplied if the checkbox was checked.
 
             const decimalPlacesForKwhSummary = 2;
             const decimalPlacesForKwSummary = 3;
@@ -582,10 +590,8 @@
                 const currentMonthSummary = monthlySummariesToRender[monthKey];
                 const currentMonthMax = monthlyMaxValuesToRender[monthKey];
 
-                // These values are now in Wh (multiplied if checkbox was checked during calculation in calculateAllMonthsSummariesAndMaxes)
-                // *** MODIFIED: Convert from Wh to kWh by dividing by 1000, then round ***
                 const displayTotalWhMonth = customRound(((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) / 1000), decimalPlacesForKwhSummary);
-                console.log("Raw Wh sums for month (Peak, Off-peak, Holiday):", currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
+                // console.log("Raw Wh sums for month (Peak, Off-peak, Holiday):", currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
 
                 const displayTotalVarhMonth = customRound(((currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh) / 1000), decimalPlacesForKwhSummary);
 
@@ -661,18 +667,16 @@
                     return customRound((roundedVarhTimesFour * currentMultiplier / 1000), decimalPlacesForTable);
                 };
             } else { // kWh, kVarh (as per UI selection, but displaying Wh for raw)
-                whUnit = 'Wh'; // *** MODIFIED: Change unit to Wh for raw display ***
-                varhUnit = 'Varh'; // *** MODIFIED: Change unit to Varh for raw display ***
+                whUnit = 'Wh';
+                varhUnit = 'Varh';
                 decimalPlacesForSummary = 2; // Summary still kWh/kVarh, 2 decimals
-                decimalPlacesForTable = 5;    // *** MODIFIED: Change to 5 for raw Wh/Varh in table ***
+                decimalPlacesForTable = 5;
 
                 whCalculation = (wh_val_raw) => {
-                    // *** MODIFIED: Keep raw Wh (multiplied), no /1000 here ***
                     return customRound((parseFloat(wh_val_raw) * currentMultiplier), decimalPlacesForTable);
                 };
 
                 varhCalculation = (varh_val_raw) => {
-                    // *** MODIFIED: Keep raw Varh (multiplied), no /1000 here ***
                     return customRound((parseFloat(varh_val_raw) * currentMultiplier), decimalPlacesForTable);
                 };
             }
@@ -682,16 +686,6 @@
             let overallMaxBaseKwCalculated = { value: 0, datetime: '' };
             let overallMaxBaseKvarCalculated = { value: 0, datetime: '' };
 
-            let totalWhConsumption = {
-                'Peak': 0,
-                'Off-peak': 0,
-                'Holiday': 0
-            };
-            let totalVarhConsumption = {
-                'Peak': 0,
-                'Off-peak': 0,
-                'Holiday': 0
-            };
 
             let filteredResults = [];
             if (selectedMonthYear === 'all') {
@@ -718,7 +712,7 @@
                 if (selectedUnit === 'kw_kvar') {
                     whUnitConverterForSort = (wh_val) => (Math.round(parseFloat(wh_val) * 4) / 1000) * currentMultiplierForSort;
                     varhUnitConverterForSort = (varh_val) => (Math.round(parseFloat(varh_val) * 4) / 1000) * currentMultiplierForSort;
-                } else { // *** MODIFIED: For kWh/kVarh selection, sort by raw Wh (multiplied), not kWh ***
+                } else {
                     whUnitConverterForSort = (wh_val) => (parseFloat(wh_val) * currentMultiplierForSort);
                     varhUnitConverterForSort = (varh_val) => (parseFloat(varh_val) * currentMultiplierForSort);
                 }
@@ -789,17 +783,6 @@
                 displayWhInTable = currentWh.toFixed(decimalPlacesForTable);
                 displayVarhInTable = currentVarh.toFixed(decimalPlacesForTable);
 
-
-                if (unitType === 'kwh_kvarh') { // This is for the kWh summary section, so these are kWh values
-                    const rate = getRate(r.dateObject);
-                    // For the summary box below, these sums are still in kWh.
-                    // The 'currentWh' and 'currentVarh' at this point for kwh_kvarh selected option
-                    // are now in Wh with 5 decimals as per the new `whCalculation` and `varhCalculation` above.
-                    // So we must convert them back to kWh for the summary.
-                    totalWhConsumption[rate] += (currentWh / 1000);
-                    totalVarhConsumption[rate] += (currentVarh / 1000);
-                }
-
                 let displayDatetime = r.datetime;
                 const cls = getRate(r.dateObject).toLowerCase().replace('-', '');
                 tableRowsHtml += `<tr class="${cls}">
@@ -807,6 +790,7 @@
             <td>${displayWhInTable}</td><td>${displayVarhInTable}</td>
         </tr>`;
             });
+
 
             let mainSummaryHtml = '';
 
@@ -816,9 +800,6 @@
                 const displayOverallMaxKw = customRound(overallMaxBaseKwCalculated.value * currentMultiplier, decimalPlacesForSummary);
                 const displayOverallMaxKvar = customRound(overallMaxBaseKvarCalculated.value * currentMultiplier, decimalPlacesForSummary);
 
-                // For individual rate max kW/kVar, we now get the data from the 'monthlyMaxValues' global variable
-                // which has been populated by calculateAllMonthsSummariesAndMaxes based on the selected AR type.
-                // We need to filter this data further by 'selectedMonthYear' for this specific summary box.
                 let displayPeakMaxKw = 'N/A';
                 let displayPeakMaxKvar = 'N/A';
                 let displayOffPeakMaxKw = 'N/A';
@@ -829,7 +810,6 @@
                 if (selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear]) {
                     const currentMonthMaxData = monthlyMaxValues[selectedMonthYear];
                     if (currentMonthMaxData['Peak']) {
-                        // Values in monthlyMaxValues are already multiplied by now, so no need for currentMultiplier here
                         displayPeakMaxKw = customRound(currentMonthMaxData['Peak'].wh, decimalPlacesForSummary);
                         displayPeakMaxKvar = customRound(currentMonthMaxData['Peak'].varh, decimalPlacesForSummary);
                     }
@@ -874,14 +854,47 @@
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].varh_datetime : 'N/A'}</small></p>
             </div>
         `;
-            } else { // This part is for the kWh/kVarh summary for the currently filtered period
+            } else {
+                let displayPeakWh = 0, displayPeakVarh = 0;
+                let displayOffPeakWh = 0, displayOffPeakVarh = 0;
+                let displayHolidayWh = 0, displayHolidayVarh = 0;
+                let displayTotalWh = 0, displayTotalVarh = 0;
+
+                if (selectedMonthYear !== 'all' && monthlySummaries[selectedMonthYear]) {
+                    const selectedMonthSummary = monthlySummaries[selectedMonthYear];
+                    displayPeakWh = selectedMonthSummary['Peak'].wh / 1000;
+                    displayPeakVarh = selectedMonthSummary['Peak'].varh / 1000;
+                    displayOffPeakWh = selectedMonthSummary['Off-peak'].wh / 1000;
+                    displayOffPeakVarh = selectedMonthSummary['Off-peak'].varh / 1000;
+                    displayHolidayWh = selectedMonthSummary['Holiday'].wh / 1000;
+                    displayHolidayVarh = selectedMonthSummary['Holiday'].varh / 1000;
+
+                    displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                    displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+                } else if (selectedMonthYear === 'all') {
+                    // If "แสดงข้อมูลทั้งหมด" is selected, sum up all monthly summaries
+                    for (const monthKey in monthlySummaries) {
+                        if (monthlySummaries.hasOwnProperty(monthKey)) {
+                            const monthSummary = monthlySummaries[monthKey];
+                            displayPeakWh += monthSummary['Peak'].wh / 1000;
+                            displayPeakVarh += monthSummary['Peak'].varh / 1000;
+                            displayOffPeakWh += monthSummary['Off-peak'].wh / 1000;
+                            displayOffPeakVarh += monthSummary['Off-peak'].varh / 1000;
+                            displayHolidayWh += monthSummary['Holiday'].wh / 1000;
+                            displayHolidayVarh += monthSummary['Holiday'].varh / 1000;
+                        }
+                    }
+                    displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                    displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+                }
+
                 mainSummaryHtml += `
             <div class="summary-box consumption-summary">
                 <h3>สรุปการใช้พลังงาน (รวม)</h3>
-                <p>รวม Peak: <strong>${totalWhConsumption['Peak'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Peak'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p>รวม Off-peak: <strong>${totalWhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p>รวม Holiday: <strong>${totalWhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p class="total-overall">รวมทั้งหมด: <strong>${(totalWhConsumption['Peak'] + totalWhConsumption['Off-peak'] + totalWhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${(totalVarhConsumption['Peak'] + totalVarhConsumption['Off-peak'] + totalVarhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p>รวม Peak: <strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p>รวม Off-peak: <strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p>รวม Holiday: <strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p class="total-overall">รวมทั้งหมด: <strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
             </div>
         `;
             }
@@ -895,10 +908,10 @@
                 title: 'เรท',
                 index: 1
             }, {
-                title: whUnit, // This will now be 'Wh' or 'kW'
+                title: whUnit,
                 index: 2
             }, {
-                title: varhUnit, // This will now be 'Varh' or 'kVar'
+                title: varhUnit,
                 index: 3
             }];
 
@@ -947,7 +960,7 @@
                 let isCompactFormat = false;
 
                 const headerRowCompact = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 'A1:C1' })[0];
-                console.log("Header row for compact check:", headerRowCompact);
+                // console.log("Header row for compact check:", headerRowCompact); // Commented out for cleaner console
 
                 if (headerRowCompact &&
                     headerRowCompact[0] === 'DATE_M' &&
@@ -1053,17 +1066,13 @@
             const outputDiv = document.getElementById('output');
             outputDiv.innerHTML = '';
 
-            // MODIFIED: Calculate monthly summaries and max values FOR ALL MONTHS, based on selected AR Type
             const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
                 calculateAllMonthsSummariesAndMaxes(selectedArType);
 
-            // Update global variables with the calculated data for the current selection
             monthlySummaries = calculatedMonthlySummaries;
             monthlyMaxValues = calculatedMonthlyMaxValues;
 
 
-            // Render monthly summary table first
-            // Pass the calculated monthly summaries and max values (which now contain ALL months filtered by selected AR type)
             outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues);
 
             const summaryBoxWrapper = document.createElement('div');
@@ -1164,7 +1173,7 @@
                     const roundedVarhTimesFour = Math.round(parseFloat(varh_val_raw) * 4);
                     return customRound((roundedVarhTimesFour * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
-            } else { // kWh, kVarh (as per UI selection, but displaying Wh for export)
+            } else {
                 whUnit = 'Wh';
                 varhUnit = 'Varh';
                 decimalPlaces = 5;
@@ -1275,7 +1284,6 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Electric Rates Filtered");
 
-            // *** MODIFIED: New filename format ***
             const now = new Date();
             const day = String(now.getDate()).padStart(2, '0');
             const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -1285,7 +1293,7 @@
             const seconds = String(now.getSeconds()).padStart(2, '0');
 
             const formattedDateTime = `${day}/${month}/${year}_${hours}${minutes}${seconds}`;
-            const filename = `${meterNumber || 'N_A'}_${formattedDateTime}.xlsx`; // Use 'N_A' if meterNumber is not available
+            const filename = `${meterNumber || 'N_A'}_${formattedDateTime}.xlsx`;
 
             XLSX.writeFile(wb, filename);
         }
