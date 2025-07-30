@@ -404,7 +404,7 @@
 
             } else {
                 let prevReadingMonth = selectedMonth - 1;
-                let prevReadingYear = targetYear;
+                let prevReadingYear = selectedYear; // Corrected: Use selectedYear here
                 if (prevReadingMonth === 0) {
                     prevReadingMonth = 12;
                     prevReadingYear--;
@@ -494,13 +494,12 @@
                         };
                     }
 
-                    // Apply multiplier here if checkbox is checked for the summary calculation
-                    // Apply customRound here
-                    const kWh_calculated_base_for_sum = customRound((originalWhValue * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwhSummary);
-                    const kVarh_calculated_base_for_sum = customRound((originalVarhValue * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwhSummary);
+                    // *** MODIFIED: Store sums in Wh (after multiplier), conversion to kWh and rounding to 2 decimals happens at render time ***
+                    const wh_sum_value = (originalWhValue * currentMultiplierForSummaryCalculation);
+                    const varh_sum_value = (originalVarhValue * currentMultiplierForSummaryCalculation);
 
-                    calculatedMonthlySummaries[dataPointMonthKey][rate].wh += kWh_calculated_base_for_sum;
-                    calculatedMonthlySummaries[dataPointMonthKey][rate].varh += kVarh_calculated_base_for_sum;
+                    calculatedMonthlySummaries[dataPointMonthKey][rate].wh += wh_sum_value;
+                    calculatedMonthlySummaries[dataPointMonthKey][rate].varh += varh_sum_value;
 
                     // kW and kVar max calculation also needs the multiplier applied consistently
                     const kW_calculated_base = customRound((Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
@@ -583,15 +582,16 @@
                 const currentMonthSummary = monthlySummariesToRender[monthKey];
                 const currentMonthMax = monthlyMaxValuesToRender[monthKey];
 
-                // These values are now already multiplied if the checkbox was checked during calculation in calculateAllMonthsSummariesAndMaxes
-                const displayTotalWhMonth = customRound((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh), decimalPlacesForKwhSummary);
-                console.log(currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
+                // These values are now in Wh (multiplied if checkbox was checked during calculation in calculateAllMonthsSummariesAndMaxes)
+                // *** MODIFIED: Convert from Wh to kWh by dividing by 1000, then round ***
+                const displayTotalWhMonth = customRound(((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) / 1000), decimalPlacesForKwhSummary);
+                console.log("Raw Wh sums for month (Peak, Off-peak, Holiday):", currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
 
-                const displayTotalVarhMonth = customRound((currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh), decimalPlacesForKwhSummary);
+                const displayTotalVarhMonth = customRound(((currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh) / 1000), decimalPlacesForKwhSummary);
 
-                const displayPeakWh = customRound(currentMonthSummary['Peak'].wh, decimalPlacesForKwhSummary);
-                const displayOffPeakWh = customRound(currentMonthSummary['Off-peak'].wh, decimalPlacesForKwhSummary);
-                const displayHolidayWh = customRound(currentMonthSummary['Holiday'].wh, decimalPlacesForKwhSummary);
+                const displayPeakWh = customRound((currentMonthSummary['Peak'].wh / 1000), decimalPlacesForKwhSummary);
+                const displayOffPeakWh = customRound((currentMonthSummary['Off-peak'].wh / 1000), decimalPlacesForKwhSummary);
+                const displayHolidayWh = customRound((currentMonthSummary['Holiday'].wh / 1000), decimalPlacesForKwhSummary);
 
                 const displayPeakKw = customRound(currentMonthMax['Peak'].wh, decimalPlacesForKwSummary);
                 const displayOffPeakKw = customRound(currentMonthMax['Off-peak'].wh, decimalPlacesForKwSummary);
@@ -660,18 +660,20 @@
                     const roundedVarhTimesFour = Math.round(parseFloat(varh_val_raw) * 4);
                     return customRound((roundedVarhTimesFour * currentMultiplier / 1000), decimalPlacesForTable);
                 };
-            } else { // kWh, kVarh
-                whUnit = 'kWh';
-                varhUnit = 'kVarh';
-                decimalPlacesForSummary = 2;
-                decimalPlacesForTable = 2; // เปลี่ยนตรงนี้ให้เป็น 2
+            } else { // kWh, kVarh (as per UI selection, but displaying Wh for raw)
+                whUnit = 'Wh'; // *** MODIFIED: Change unit to Wh for raw display ***
+                varhUnit = 'Varh'; // *** MODIFIED: Change unit to Varh for raw display ***
+                decimalPlacesForSummary = 2; // Summary still kWh/kVarh, 2 decimals
+                decimalPlacesForTable = 5;    // *** MODIFIED: Change to 5 for raw Wh/Varh in table ***
 
                 whCalculation = (wh_val_raw) => {
-                    return customRound((parseFloat(wh_val_raw) * currentMultiplier / 1000), decimalPlacesForTable);
+                    // *** MODIFIED: Keep raw Wh (multiplied), no /1000 here ***
+                    return customRound((parseFloat(wh_val_raw) * currentMultiplier), decimalPlacesForTable);
                 };
 
                 varhCalculation = (varh_val_raw) => {
-                    return customRound((parseFloat(varh_val_raw) * currentMultiplier / 1000), decimalPlacesForTable);
+                    // *** MODIFIED: Keep raw Varh (multiplied), no /1000 here ***
+                    return customRound((parseFloat(varh_val_raw) * currentMultiplier), decimalPlacesForTable);
                 };
             }
 
@@ -716,13 +718,9 @@
                 if (selectedUnit === 'kw_kvar') {
                     whUnitConverterForSort = (wh_val) => (Math.round(parseFloat(wh_val) * 4) / 1000) * currentMultiplierForSort;
                     varhUnitConverterForSort = (varh_val) => (Math.round(parseFloat(varh_val) * 4) / 1000) * currentMultiplierForSort;
-                } else {
-                    whUnitConverterForSort = (wh_val) => {
-                        return (parseFloat(wh_val) / 1000) * currentMultiplierForSort;
-                    };
-                    varhUnitConverterForSort = (varh_val) => {
-                        return (parseFloat(varh_val) / 1000) * currentMultiplierForSort;
-                    };
+                } else { // *** MODIFIED: For kWh/kVarh selection, sort by raw Wh (multiplied), not kWh ***
+                    whUnitConverterForSort = (wh_val) => (parseFloat(wh_val) * currentMultiplierForSort);
+                    varhUnitConverterForSort = (varh_val) => (parseFloat(varh_val) * currentMultiplierForSort);
                 }
 
                 dataToRender.sort((a, b) => {
@@ -792,10 +790,14 @@
                 displayVarhInTable = currentVarh.toFixed(decimalPlacesForTable);
 
 
-                if (unitType === 'kwh_kvarh') {
+                if (unitType === 'kwh_kvarh') { // This is for the kWh summary section, so these are kWh values
                     const rate = getRate(r.dateObject);
-                    totalWhConsumption[rate] += currentWh;
-                    totalVarhConsumption[rate] += currentVarh;
+                    // For the summary box below, these sums are still in kWh.
+                    // The 'currentWh' and 'currentVarh' at this point for kwh_kvarh selected option
+                    // are now in Wh with 5 decimals as per the new `whCalculation` and `varhCalculation` above.
+                    // So we must convert them back to kWh for the summary.
+                    totalWhConsumption[rate] += (currentWh / 1000);
+                    totalVarhConsumption[rate] += (currentVarh / 1000);
                 }
 
                 let displayDatetime = r.datetime;
@@ -872,14 +874,14 @@
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].varh_datetime : 'N/A'}</small></p>
             </div>
         `;
-            } else {
+            } else { // This part is for the kWh/kVarh summary for the currently filtered period
                 mainSummaryHtml += `
             <div class="summary-box consumption-summary">
                 <h3>สรุปการใช้พลังงาน (รวม)</h3>
-                <p>รวม Peak: <strong>${totalWhConsumption['Peak'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Peak'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
-                <p>รวม Off-peak: <strong>${totalWhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
-                <p>รวม Holiday: <strong>${totalWhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${totalVarhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
-                <p class="total-overall">รวมทั้งหมด: <strong>${(totalWhConsumption['Peak'] + totalWhConsumption['Off-peak'] + totalWhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} ${whUnit}</strong>, <strong>${(totalVarhConsumption['Peak'] + totalVarhConsumption['Off-peak'] + totalVarhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} ${varhUnit}</strong></p>
+                <p>รวม Peak: <strong>${totalWhConsumption['Peak'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Peak'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p>รวม Off-peak: <strong>${totalWhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Off-peak'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p>รวม Holiday: <strong>${totalWhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${totalVarhConsumption['Holiday'].toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+                <p class="total-overall">รวมทั้งหมด: <strong>${(totalWhConsumption['Peak'] + totalWhConsumption['Off-peak'] + totalWhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${(totalVarhConsumption['Peak'] + totalVarhConsumption['Off-peak'] + totalVarhConsumption['Holiday']).toFixed(decimalPlacesForSummary)} kVarh</strong></p>
             </div>
         `;
             }
@@ -893,10 +895,10 @@
                 title: 'เรท',
                 index: 1
             }, {
-                title: whUnit,
+                title: whUnit, // This will now be 'Wh' or 'kW'
                 index: 2
             }, {
-                title: varhUnit,
+                title: varhUnit, // This will now be 'Varh' or 'kVar'
                 index: 3
             }];
 
@@ -1162,17 +1164,17 @@
                     const roundedVarhTimesFour = Math.round(parseFloat(varh_val_raw) * 4);
                     return customRound((roundedVarhTimesFour * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
                 };
-            } else { // kWh, kVarh
-                whUnit = 'kWh';
-                varhUnit = 'kVarh';
-                decimalPlaces = 2; // เปลี่ยนตรงนี้ให้เป็น 2
+            } else { // kWh, kVarh (as per UI selection, but displaying Wh for export)
+                whUnit = 'Wh';
+                varhUnit = 'Varh';
+                decimalPlaces = 5;
 
                 whCalculation = (wh_val_raw) => {
-                    return customRound((parseFloat(wh_val_raw) * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
+                    return customRound((parseFloat(wh_val_raw) * currentMultiplierForDisplayOrExport), decimalPlaces);
                 };
 
                 varhCalculation = (varh_val_raw) => {
-                    return customRound((parseFloat(varh_val_raw) * currentMultiplierForDisplayOrExport / 1000), decimalPlaces);
+                    return customRound((parseFloat(varh_val_raw) * currentMultiplierForDisplayOrExport), decimalPlaces);
                 };
             }
 
@@ -1207,8 +1209,8 @@
                     whUnitConverterForSort = (wh_val) => (Math.round(parseFloat(wh_val) * 4) / 1000) * currentMultiplierForSort;
                     varhUnitConverterForSort = (varh_val) => (Math.round(parseFloat(varh_val) * 4) / 1000) * currentMultiplierForSort;
                 } else {
-                    whUnitConverterForSort = (wh_val) => (parseFloat(wh_val) / 1000) * currentMultiplierForSort;
-                    varhUnitConverterForSort = (varh_val) => (parseFloat(varh_val) / 1000) * currentMultiplierForSort;
+                    whUnitConverterForSort = (wh_val) => (parseFloat(wh_val) * currentMultiplierForSort);
+                    varhUnitConverterForSort = (varh_val) => (parseFloat(varh_val) * currentMultiplierForSort);
                 }
 
                 dataForExport.sort((a, b) => {
@@ -1273,7 +1275,17 @@
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, "Electric Rates Filtered");
 
-            const filename = `Electric_Rates_${selectedMonthYear}_${selectedArType}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+            // *** MODIFIED: New filename format ***
+            const now = new Date();
+            const day = String(now.getDate()).padStart(2, '0');
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const year = now.getFullYear();
+            const hours = String(now.getHours()).padStart(2, '0');
+            const minutes = String(now.getMinutes()).padStart(2, '0');
+            const seconds = String(now.getSeconds()).padStart(2, '0');
+
+            const formattedDateTime = `${day}/${month}/${year}_${hours}${minutes}${seconds}`;
+            const filename = `${meterNumber || 'N_A'}_${formattedDateTime}.xlsx`; // Use 'N_A' if meterNumber is not available
 
             XLSX.writeFile(wb, filename);
         }
