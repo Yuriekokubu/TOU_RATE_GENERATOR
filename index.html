@@ -459,33 +459,22 @@
             // First, determine all unique billing months present in the data for the selected AR type
             const uniqueBillingMonthYears = new Set();
             globalResults.forEach(r => {
-                // For each data point, determine which billing period it *could* belong to.
-                // This is a bit tricky since one data point's calendar month might be different from its billing month.
-                // We need to iterate through possible target months.
-                // A simpler approach for this summary calculation is to find all unique (year, month) pairs for the *data points themselves*,
-                // then for each of those calendar months, figure out its billing period, and aggregate.
-                // However, the `isInBillingPeriod` function already takes `targetMonth` and `targetYear`.
-                // So, let's iterate through all *actual calendar months* present in the data.
                 const bkkComponents = getBKKTimeComponents(r.dateObject);
                 const calendarMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
                 uniqueBillingMonthYears.add(calendarMonthKey);
             });
 
-            // Now, for each unique calendar month found in the data, calculate its billing period summary
-            // This ensures that each "billing month" in the summary table corresponds to a distinct billing period.
             Array.from(uniqueBillingMonthYears).sort().forEach(monthKey => {
                 const [yearStr, monthStr] = monthKey.split('-');
                 const targetYear = parseInt(yearStr);
-                const targetMonth = parseInt(monthStr); // 1-indexed
+                const targetMonth = parseInt(monthStr);
 
                 const { startDate, endDate } = getBillingPeriodDates(targetYear, targetMonth, selectedArType);
 
                 if (!startDate || !endDate) {
-                    console.warn(`Skipping summary for ${monthKey} due to invalid billing period dates.`);
                     return;
                 }
 
-                // Initialize summary and max values for this billing month
                 calculatedMonthlySummaries[monthKey] = {
                     'Peak': { wh: 0, varh: 0 },
                     'Off-peak': { wh: 0, varh: 0 },
@@ -499,7 +488,6 @@
 
                 globalResults.forEach(r => {
                     const dateObjectBKK = r.dateObject;
-                    // Check if this data point falls within the *current billing period* being processed
                     if (dateObjectBKK.getTime() >= startDate.getTime() && dateObjectBKK.getTime() <= endDate.getTime()) {
                         const originalWhValue = r.originalWhValue || 0;
                         const originalVarhValue = r.originalVarhValue || 0;
@@ -511,6 +499,7 @@
                         calculatedMonthlySummaries[monthKey][rate].wh += wh_sum_value;
                         calculatedMonthlySummaries[monthKey][rate].varh += varh_sum_value;
 
+                        // Calculation for kW Max and kVar Max
                         const kW_calculated_base = customRound((Math.round(originalWhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
                         const kVar_calculated_base = customRound((Math.round(originalVarhValue * 4) * currentMultiplierForSummaryCalculation / 1000), decimalPlacesForKwSummary);
 
@@ -556,7 +545,6 @@
                             <th>kWh (Peak)</th>
                             <th>kWh (Off-Peak)</th>
                             <th>kWh (Holiday)</th>
-                            <th>kVarh (รวมทั้งสามเรท)</th>
                             <th>kW Max(Peak)</th>
                             <th>kW Max(Off-Peak)</th>
                             <th>kW Max(Holiday)</th>
@@ -575,8 +563,7 @@
                 const [yearB, monthB] = b.split('-').map(Number);
                 if (yearA !== yearB) return yearA - yearB;
                 return monthA - monthB;
-            }); // Sort ascending by year then month
-
+            });
 
             const decimalPlacesForKwhSummary = 2;
             const decimalPlacesForKwSummary = 3;
@@ -591,9 +578,6 @@
                 const currentMonthMax = monthlyMaxValuesToRender[monthKey];
 
                 const displayTotalWhMonth = customRound(((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) / 1000), decimalPlacesForKwhSummary);
-                // console.log("Raw Wh sums for month (Peak, Off-peak, Holiday):", currentMonthSummary['Peak'].wh, currentMonthSummary['Off-peak'].wh, currentMonthSummary['Holiday'].wh);
-
-                const displayTotalVarhMonth = customRound(((currentMonthSummary['Peak'].varh + currentMonthSummary['Off-peak'].varh + currentMonthSummary['Holiday'].varh) / 1000), decimalPlacesForKwhSummary);
 
                 const displayPeakWh = customRound((currentMonthSummary['Peak'].wh / 1000), decimalPlacesForKwhSummary);
                 const displayOffPeakWh = customRound((currentMonthSummary['Off-peak'].wh / 1000), decimalPlacesForKwhSummary);
@@ -611,7 +595,6 @@
                 });
                 const displayMaxKvarMonthOverall = customRound(baseMaxKvarMonthOverall, decimalPlacesForKwSummary);
 
-
                 monthlyTableHtml += `
                     <tr>
                         <td>${monthNames[monthIndex]} ${year + 543}</td>
@@ -619,7 +602,6 @@
                         <td>${displayPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
                         <td>${displayOffPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
                         <td>${displayHolidayWh.toFixed(decimalPlacesForKwhSummary)}</td>
-                        <td>${displayTotalVarhMonth.toFixed(decimalPlacesForKwhSummary)}</td>
                         <td>${displayPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
                         <td>${displayOffPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
                         <td>${displayHolidayKw.toFixed(decimalPlacesForKwSummary)}</td>
