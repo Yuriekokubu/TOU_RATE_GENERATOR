@@ -21,6 +21,7 @@ body {
 	margin: 0;
 	padding: var(--spacing);
 	box-sizing: border-box;
+	flex-direction: column;
 }
 
 .container {
@@ -32,6 +33,7 @@ body {
 	box-sizing: border-box;
 	text-align: center;
 	margin-top: var(--spacing); /* Add some margin to the top */
+	flex: 1;
 }
 
 h1 {
@@ -528,4 +530,58 @@ tbody tr:hover {
 		display: none !important;
 	}
 }
+
+/* Styling for the new consumption summary layout */
+.consumption-summary {
+	display: flex;
+	flex-direction: column;
+	padding: 20px;
+}
+
+.summary-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px; /* Space between each summary row */
+}
+
+.summary-list-item {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	padding: 30px 30px;
+	border-radius: 8px;
+	box-shadow: inset 2px 2px 5px #d9d9d9, inset -2px -2px 5px #ffffff;
+	transition: background-color 0.3s ease;
+}
+
+.summary-list-item:hover {
+	background-color: #e0e0e0;
+}
+
+.summary-list-item.peak-row {
+	background-color: #fae0e0;
+}
+.summary-list-item.off-peak-row {
+	background-color: #e0f7fa;
+}
+.summary-list-item.holiday-row {
+	background-color: #e6ffe6;
+}
+.summary-list-item.total-row {
+	background-color: #c9e6ff;
+	font-weight: bold;
+}
+
+.summary-list-item .rate-label {
+	flex-grow: 1;
+	font-size: 1em;
+	color: #555;
+}
+
+.summary-list-item .value-label {
+	text-align: right;
+	font-size: 1em;
+}
+
+
 

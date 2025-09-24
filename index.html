@@ -1250,12 +1250,26 @@
             const whTitle = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
 
             consumptionSummaryDiv.innerHTML = `
-        <h3>สรุปการใช้พลังงาน (รวม)</h3>
-        <p>รวม Peak: <strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} ${whTitle}</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-        <p>รวม Off-peak: <strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} ${whTitle}</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-        <p>รวม Holiday: <strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} ${whTitle}</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-        <p class="total-overall">รวมทั้งหมด: <strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} ${whTitle}</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-    `;
+    <h3>สรุปการใช้พลังงาน (รวม)</h3>
+    <div class="summary-list">
+        <div class="summary-list-item peak-row">
+            <span class="rate-label">รวม Peak:</span>
+            <span class="value-label"><strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+        </div>
+        <div class="summary-list-item off-peak-row">
+            <span class="rate-label">รวม Off-peak:</span>
+            <span class="value-label"><strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+        </div>
+        <div class="summary-list-item holiday-row">
+            <span class="rate-label">รวม Holiday:</span>
+            <span class="value-label"><strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+        </div>
+        <div class="summary-list-item total-row">
+            <span class="rate-label">รวมทั้งหมด:</span>
+            <span class="value-label"><strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+        </div>
+    </div>
+`;
             summaryBoxWrapper.appendChild(consumptionSummaryDiv);
 
             outputDiv.appendChild(summaryBoxWrapper);
