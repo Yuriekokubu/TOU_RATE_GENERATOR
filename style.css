@@ -1,416 +1,530 @@
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap");
 
 :root {
-    --bg-color: #f0f0f0;
-    --primary-color: #5a7d9a; /* A softer blue */
-    --text-color: #333;
-    --shadow-light: #ffffff;
-    --shadow-dark: #d1d9e6;
-    --border-radius: 12px;
-    --spacing: 20px;
+	--bg-color: #f0f0f0;
+	--primary-color: #5a7d9a; /* A softer blue */
+	--text-color: #333;
+	--shadow-light: #ffffff;
+	--shadow-dark: #d1d9e6;
+	--border-radius: 12px;
+	--spacing: 20px;
 }
 
 body {
-    font-family: 'Sarabun', sans-serif;
-    background-color: var(--bg-color);
-    color: var(--text-color);
-    display: flex;
-    justify-content: center;
-    align-items: flex-start; /* Align to top */
-    min-height: 100vh;
-    margin: 0;
-    padding: var(--spacing);
-    box-sizing: border-box;
+	font-family: "Sarabun", sans-serif;
+	background-color: var(--bg-color);
+	color: var(--text-color);
+	display: flex;
+	justify-content: center;
+	align-items: flex-start; /* Align to top */
+	min-height: 100vh;
+	margin: 0;
+	padding: var(--spacing);
+	box-sizing: border-box;
 }
 
 .container {
-    background-color: var(--bg-color);
-    padding: calc(var(--spacing) * 1.5);
-    border-radius: var(--border-radius);
-    box-shadow: 10px 10px 20px var(--shadow-dark), -10px -10px 20px var(--shadow-light);
-    width: 100%;
-    box-sizing: border-box;
-    text-align: center;
-    margin-top: var(--spacing); /* Add some margin to the top */
+	background-color: var(--bg-color);
+	padding: calc(var(--spacing) * 1.5);
+	border-radius: var(--border-radius);
+	box-shadow: 10px 10px 20px var(--shadow-dark), -10px -10px 20px var(--shadow-light);
+	width: 100%;
+	box-sizing: border-box;
+	text-align: center;
+	margin-top: var(--spacing); /* Add some margin to the top */
 }
 
 h1 {
-    color: var(--primary-color);
-    margin-bottom: var(--spacing);
-    font-weight: 600;
+	color: var(--primary-color);
+	margin-bottom: var(--spacing);
+	font-weight: 600;
 }
 
 /* Drop Area Styles */
 .drop-area {
-    border: 3px dashed var(--shadow-dark);
-    border-radius: var(--border-radius);
-    padding: calc(var(--spacing) * 2);
-    margin-bottom: var(--spacing);
-    cursor: pointer;
-    transition: all 0.3s ease;
-    box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 150px;
+	border: 3px dashed var(--shadow-dark);
+	border-radius: var(--border-radius);
+	padding: calc(var(--spacing) * 2);
+	margin-bottom: var(--spacing);
+	cursor: pointer;
+	transition: all 0.3s ease;
+	box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	min-height: 150px;
 }
 
 .drop-area.drag-over {
-    border-color: var(--primary-color);
-    background-color: #e6e6e6;
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+	border-color: var(--primary-color);
+	background-color: #e6e6e6;
+	box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
 }
 
 .drop-area .icon {
-    font-size: 3em;
-    margin-bottom: 10px;
-    color: var(--primary-color);
+	font-size: 3em;
+	margin-bottom: 10px;
+	color: var(--primary-color);
 }
 
 .drop-area p {
-    margin: 5px 0;
-    color: var(--text-color);
-    font-weight: 400;
+	margin: 5px 0;
+	color: var(--text-color);
+	font-weight: 400;
 }
 
 #excelFile {
-    display: none;
+	display: none;
 }
 
 /* Controls Section */
 .controls {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: var(--spacing);
-    margin-bottom: var(--spacing);
-    padding: var(--spacing);
-    border-radius: var(--border-radius);
-    box-shadow: inset 7px 7px 14px var(--shadow-dark), inset -7px -7px 14px var(--shadow-light);
-    background-color: var(--bg-color);
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: var(--spacing);
+	margin-bottom: var(--spacing);
+	padding: var(--spacing);
+	border-radius: var(--border-radius);
+	box-shadow: 0 5px 15px rgba(0, 0, 0, 0.107);
+	background-color: var(--bg-color);
+	position: sticky;
+	top: 0;
+	z-index: 100;
 }
 
 .control-group {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
 }
 
 .controls label {
-    margin-bottom: 8px;
-    font-weight: 600;
-    color: var(--primary-color);
+	margin-bottom: 8px;
+	font-weight: 600;
+	color: var(--primary-color);
 }
 
 /* Select and Checkbox Styles */
 .select-wrapper {
-    position: relative;
-    width: 100%;
-    background-color: var(--bg-color);
-    border-radius: var(--border-radius);
-    box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
-    overflow: hidden;
+	position: relative;
+	width: 100%;
+	background-color: var(--bg-color);
+	border-radius: var(--border-radius);
+	box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+	overflow: hidden;
 }
 
 select {
-    width: 100%;
-    padding: 12px 15px;
-    border: none;
-    background-color: transparent;
-    appearance: none; /* Remove default arrow */
-    -webkit-appearance: none;
-    -moz-appearance: none;
-    font-family: 'Sarabun', sans-serif;
-    font-size: 1em;
-    color: var(--text-color);
-    cursor: pointer;
-    outline: none;
+	width: 100%;
+	padding: 12px 15px;
+	border: none;
+	background-color: transparent;
+	appearance: none; /* Remove default arrow */
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	font-family: "Sarabun", sans-serif;
+	font-size: 1em;
+	color: var(--text-color);
+	cursor: pointer;
+	outline: none;
 }
 
 .select-wrapper::after {
-    content: '▼'; /* Custom arrow */
-    position: absolute;
-    top: 50%;
-    right: 15px;
-    transform: translateY(-50%);
-    pointer-events: none;
-    color: var(--primary-color);
+	content: "▼"; /* Custom arrow */
+	position: absolute;
+	top: 50%;
+	right: 15px;
+	transform: translateY(-50%);
+	pointer-events: none;
+	color: var(--primary-color);
 }
 
 /* --- Simplified Checkbox Styles --- */
 .checkbox-group {
-    display: flex;
-    align-items: center; /* Align checkbox and text vertically */
-    padding: 12px 0; /* Match vertical padding of other controls */
+	display: flex;
+	align-items: center; /* Align checkbox and text vertically */
+	padding: 12px 0; /* Match vertical padding of other controls */
 }
 
 /* Hide the default browser checkbox */
 .checkbox-group input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    cursor: pointer;
-    height: 0;
-    width: 0;
+	position: absolute;
+	opacity: 0;
+	cursor: pointer;
+	height: 0;
+	width: 0;
 }
 
 .custom-checkbox {
-    position: relative;
-    padding-left: 30px; /* Space for the custom checkbox */
-    cursor: pointer;
-    font-weight: 600;
-    color: var(--primary-color); 
-    user-select: none;
-    display: flex; 
-    align-items: center;
-    min-height: 20px; /* Adjust height as needed */
-    margin-bottom: 0; 
+	position: relative;
+	padding-left: 30px; /* Space for the custom checkbox */
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--primary-color);
+	user-select: none;
+	display: flex;
+	align-items: center;
+	min-height: 20px; /* Adjust height as needed */
+	margin-bottom: 0;
 }
 
 /* This will be the visible box */
 .custom-checkbox .icon-unchecked {
-    position: absolute;
-    left: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    height: 20px; /* Size of the custom box */
-    width: 20px; /* Size of the custom box */
-    background-color: #eee; /* Light gray box background */
-    border: 1px solid #ccc; /* Simple gray border */
-    border-radius: 4px; /* Slightly rounded corners */
-    transition: background-color 0.2s, border-color 0.2s;
-    z-index: 1; /* อยู่ด้านล่าง */
+	position: absolute;
+	left: 0;
+	top: 50%;
+	transform: translateY(-50%);
+	height: 20px; /* Size of the custom box */
+	width: 20px; /* Size of the custom box */
+	background-color: #eee; /* Light gray box background */
+	border: 1px solid #ccc; /* Simple gray border */
+	border-radius: 4px; /* Slightly rounded corners */
+	transition: background-color 0.2s, border-color 0.2s;
+	z-index: 1; /* อยู่ด้านล่าง */
 }
 
 /* This is the checkmark (✔) */
 .custom-checkbox .icon-checked {
-    position: absolute;
-    left: 0px; 
-    top: 50%;
-    transform: translateY(-50%) scale(0); /* Hidden by default */
-    height: 20px; 
-    width: 20px; 
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 1.2em; 
-    color: #28a745; 
-    transition: transform 0.2s ease;
-    text-shadow: 0 0 2px rgba(0,0,0,0.3);
-    z-index: 2; /* อยู่ด้านบน */
+	position: absolute;
+	left: 0px;
+	top: 50%;
+	transform: translateY(-50%) scale(0); /* Hidden by default */
+	height: 20px;
+	width: 20px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	font-size: 1.2em;
+	color: #28a745;
+	transition: transform 0.2s ease;
+	text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
+	z-index: 2; /* อยู่ด้านบน */
 }
 
 /* When the real checkbox is checked, show the checkmark and change box style */
 .checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-unchecked {
-    background-color: #e0e0e0; 
-    border-color: #28a745; 
+	background-color: #e0e0e0;
+	border-color: #28a745;
 }
 
 .checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-checked {
-    transform: translateY(-50%) scale(1); /* Show the checkmark */
+	transform: translateY(-50%) scale(1); /* Show the checkmark */
 }
 /* --- End Simplified Checkbox Styles --- */
 
-
 /* Summary Boxes */
 .summary-box {
-    background-color: var(--bg-color);
-    padding: var(--spacing);
-    border-radius: var(--border-radius);
-    box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
-    text-align: center;
-    margin-bottom: var(--spacing);
+	text-align: center; /* เปลี่ยนจาก left เป็น center */
+	padding: var(--spacing);
+	border-radius: var(--border-radius);
+	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
+	margin-bottom: var(--spacing);
 }
 
 .summary-box h3 {
-    color: var(--primary-color);
-    margin-top: 0;
-    margin-bottom: 10px;
-    font-weight: 600;
+	color: var(--primary-color);
+	margin-top: 0;
+	margin-bottom: 10px;
+	font-weight: 600;
 }
 
 .summary-box p {
-    margin: 5px 0;
-    font-size: 1.1em;
+	margin: 5px 0;
+	font-size: 1.1em;
 }
 
 .summary-box strong {
-    color: var(--text-color);
+	color: var(--text-color);
 }
 
 .rate-summary-container {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: var(--spacing);
-    margin-bottom: calc(var(--spacing) * 1.5);
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+	gap: var(--spacing);
+	margin-bottom: calc(var(--spacing) * 1.5);
 }
 
 /* Table Styles */
 table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: var(--spacing);
-    background-color: var(--bg-color);
-    border-radius: var(--border-radius);
-    overflow: hidden; /* Ensures rounded corners apply to content */
-    box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: var(--spacing);
+	background-color: var(--bg-color);
+	border-radius: var(--border-radius);
+	overflow: hidden; /* Ensures rounded corners apply to content */
+	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
 }
 
-th, td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid var(--shadow-dark);
+th,
+td {
+	padding: 12px 15px;
+	text-align: left;
+	border-bottom: 1px solid var(--shadow-dark);
 }
 
 th {
-    background-color: var(--primary-color);
-    color: var(--bg-color);
-    font-weight: 600;
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    cursor: pointer; /* Indicate sortable */
-    transition: background-color 0.3s ease;
+	background-color: var(--primary-color);
+	color: var(--bg-color);
+	font-weight: 600;
+	position: sticky;
+	top: 0;
+	z-index: 10;
+	cursor: pointer; /* Indicate sortable */
+	transition: background-color 0.3s ease;
 }
 
 th.sortable {
-    position: relative;
-    padding-right: 15px; /* ลดพื้นที่ด้านขวาลง เพราะไม่มีไอคอน */
+	position: relative;
+	padding-right: 15px; /* ลดพื้นที่ด้านขวาลง เพราะไม่มีไอคอน */
 }
 
 th:hover {
-    background-color: #4a6c84; /* Slightly darker primary on hover */
+	background-color: #4a6c84; /* Slightly darker primary on hover */
 }
 
 tbody tr {
-    transition: background-color 0.2s ease;
+	transition: background-color 0.2s ease;
 }
 
 tbody tr:nth-child(even) {
-    background-color: #e6e6e6; /* Lighter background for even rows */
+	background-color: #e6e6e6; /* Lighter background for even rows */
 }
 
 tbody tr:hover {
-    background-color: #d8d8d8; /* Highlight on hover */
-    box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+	background-color: #d8d8d8; /* Highlight on hover */
+	box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
 }
 
 /* Specific row styles based on rate */
 .peak {
-    background-color: #ffe0e0; /* Red for Peak */
+	background-color: #ffe0e0; /* Red for Peak */
 }
 
 .offpeak {
-    background-color: #e0f2f7; /* Blue for Off-peak */
+	background-color: #e0f2f7; /* Blue for Off-peak */
 }
 
 .holiday {
-    background-color: #e6ffe6; /* Green for Holiday */
+	background-color: #e6ffe6; /* Green for Holiday */
 }
 
 /* สำหรับเรท Peak */
 .peak:hover {
-    background-color: #ffb3b3; /* สีแดงอ่อนลงเมื่อโฮเวอร์ */
+	background-color: #ffb3b3; /* สีแดงอ่อนลงเมื่อโฮเวอร์ */
 }
 
 /* สำหรับเรท Off-peak */
-.offpeak:hover { /* ใช้ .offpeak ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
-    background-color: #b3d9ff; /* สีฟ้าอ่อนลงเมื่อโฮเวอร์ (ปรับจากสีเขียวในคำขอเดิมให้เข้ากับสีฟ้าของ offpeak) */
+.offpeak:hover {
+	/* ใช้ .offpeak ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
+	background-color: #b3d9ff; /* สีฟ้าอ่อนลงเมื่อโฮเวอร์ (ปรับจากสีเขียวในคำขอเดิมให้เข้ากับสีฟ้าของ offpeak) */
 }
 
 /* สำหรับเรท Holiday */
-.holiday:hover { /* ใช้ .holiday ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
-    background-color: #cce0cc; /* สีเขียวอ่อนลงเมื่อโฮเวอร์ */
+.holiday:hover {
+	/* ใช้ .holiday ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
+	background-color: #cce0cc; /* สีเขียวอ่อนลงเมื่อโฮเวอร์ */
 }
 
 /* --- New Button Styles (General & Export Specific) --- */
 /* General button styling */
 .button {
-    font-family: 'Sarabun', sans-serif; /* ใช้ Font Sarabun ตามที่คุณกำหนด */
-    padding: 12px 25px;
-    border: none;
-    border-radius: var(--border-radius); /* ใช้ตัวแปร border-radius */
-    cursor: pointer;
-    font-size: 1rem;
-    font-weight: 600;
-    transition: all 0.2s ease-in-out; /* เพื่อให้ animation ดูนุ่มนวล */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px; /* ระยะห่างระหว่าง icon กับ text ถ้ามี */
-    color: var(--text-color); /* ใช้สีข้อความหลัก */
+	font-family: "Sarabun", sans-serif; /* ใช้ Font Sarabun ตามที่คุณกำหนด */
+	padding: 12px 25px;
+	border: none;
+	border-radius: var(--border-radius); /* ใช้ตัวแปร border-radius */
+	cursor: pointer;
+	font-size: 1rem;
+	font-weight: 600;
+	transition: all 0.2s ease-in-out; /* เพื่อให้ animation ดูนุ่มนวล */
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px; /* ระยะห่างระหว่าง icon กับ text ถ้ามี */
+	color: var(--text-color); /* ใช้สีข้อความหลัก */
 }
 
 /* Neumorphism Base Style for all buttons */
 .button {
-    background-color: var(--bg-color); /* สีพื้นหลังเดียวกับพื้นหลัง container */
-    box-shadow: 6px 6px 12px var(--shadow-dark), /* เงาล่างขวาเข้ม (กดแล้วจมลง) */
-                -6px -6px 12px var(--shadow-light); /* เงาบนซ้ายสว่าง (ยกขึ้น) */
+	background-color: var(--bg-color); /* สีพื้นหลังเดียวกับพื้นหลัง container */
+	box-shadow: 6px 6px 12px var(--shadow-dark), /* เงาล่างขวาเข้ม (กดแล้วจมลง) */ -6px -6px 12px var(--shadow-light); /* เงาบนซ้ายสว่าง (ยกขึ้น) */
 }
 
 /* Style for Export Button specifically */
 #exportExcel {
-    background-color: #d1e7dd; /* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
-    color: #285430; /* สีข้อความเข้มขึ้น */
-    box-shadow: 6px 6px 12px #a7a7a7, /* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */
-                -6px -6px 12px #ffffff;
+	background-color: #d1e7dd; /* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
+	color: #285430; /* สีข้อความเข้มขึ้น */
+	box-shadow: 6px 6px 12px #a7a7a7, /* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */ -6px -6px 12px #ffffff;
 }
 
 /* Hover effect */
 #exportExcel:hover {
-    background-color: #c0dbc2; /* สีเขียวอ่อนลงเมื่อ hover */
-    box-shadow: 4px 4px 8px #a7a7a7,
-                -4px -4px 8px #ffffff;
-    transform: translateY(-2px); /* ยกปุ่มขึ้นเล็กน้อย */
+	background-color: #c0dbc2; /* สีเขียวอ่อนลงเมื่อ hover */
+	box-shadow: 4px 4px 8px #a7a7a7, -4px -4px 8px #ffffff;
+	transform: translateY(-2px); /* ยกปุ่มขึ้นเล็กน้อย */
 }
 
 /* Active (clicked) effect */
 #exportExcel:active {
-    background-color: #acd8ae; /* สีเขียวเข้มขึ้นเมื่อถูกกด */
-    box-shadow: inset 2px 2px 5px #a7a7a7, /* เงาด้านใน ให้ดูจมลง */
-                inset -3px -3px 7px #ffffff;
-    transform: translateY(0); /* กลับมาตำแหน่งเดิม */
+	background-color: #acd8ae; /* สีเขียวเข้มขึ้นเมื่อถูกกด */
+	box-shadow: inset 2px 2px 5px #a7a7a7, /* เงาด้านใน ให้ดูจมลง */ inset -3px -3px 7px #ffffff;
+	transform: translateY(0); /* กลับมาตำแหน่งเดิม */
 }
 
 /* Optional: Add an icon to the button */
 #exportExcel::before {
-    content: '📊'; /* Unicode for a chart/spreadsheet icon */
-    font-size: 1.1em;
-    margin-right: 5px;
+	content: "📊"; /* Unicode for a chart/spreadsheet icon */
+	font-size: 1.1em;
+	margin-right: 5px;
 }
 /* --- End New Button Styles --- */
 
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .container {
-        padding: var(--spacing);
-    }
+	.container {
+		padding: var(--spacing);
+	}
 
-    .controls {
-        grid-template-columns: 1fr; /* Stack controls on small screens */
-    }
+	.controls {
+		grid-template-columns: 1fr; /* Stack controls on small screens */
+	}
 
-    .rate-summary-container {
-        grid-template-columns: 1fr; /* Stack summary boxes */
-    }
+	.rate-summary-container {
+		grid-template-columns: 1fr; /* Stack summary boxes */
+	}
 
-    th, td {
-        padding: 8px 10px;
-        font-size: 0.9em;
-    }
+	th,
+	td {
+		padding: 8px 10px;
+		font-size: 0.9em;
+	}
 }
 
 .summary-box.summary-peak {
-    background-color: #ffe0e0; /* A shade of red for Peak */
-    border: 1px solid #ff4d4d;
+	background-color: #ffe0e0; /* A shade of red for Peak */
+	border: 1px solid #ff4d4d;
 }
 
 .summary-box.summary-off-peak {
-    background-color: #e0f2f7; /* A shade of blue for Off-peak */
-    border: 1px solid #4da6ff;
+	background-color: #e0f2f7; /* A shade of blue for Off-peak */
+	border: 1px solid #4da6ff;
 }
 
 .summary-box.summary-holiday {
-    background-color: #e6ffe6; /* A shade of green for Holiday */
-    border: 1px solid #66cc66;
+	background-color: #e6ffe6; /* A shade of green for Holiday */
+	border: 1px solid #66cc66;
+}
+
+.column-layout {
+	display: flex;
+	justify-content: space-between;
+	gap: 20px;
+	flex-wrap: wrap;
+}
+.summary-box {
+	flex: 1;
+	min-width: 200px;
+}
+
+.monthly-summary-table-container {
+	margin-bottom: 30px; /* เพิ่มช่องว่างด้านล่าง 30px */
+}
+
+/* Update your existing styles with the following changes */
+/* Adjustments for text and layout inside summary boxes */
+.summary-box {
+	text-align: left; /* จัดข้อความทั้งหมดภายในกล่องให้อยู่ชิดซ้ายเป็นค่าเริ่มต้น */
+	padding: var(--spacing);
+	border-radius: var(--border-radius);
+	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
+	margin-bottom: var(--spacing);
+}
+
+.summary-box h3 {
+	text-align: center; /* จัดหัวข้อให้อยู่ตรงกลาง */
+	color: var(--primary-color);
+	margin-top: 0;
+	margin-bottom: 10px;
+	font-weight: 600;
+}
+
+.summary-box p {
+	margin: 5px 0;
+	font-size: 1.1em;
+	line-height: 1.5; /* เพิ่มระยะห่างระหว่างบรรทัดเพื่อให้อ่านง่ายขึ้น */
+}
+
+.summary-box strong {
+	color: var(--text-color);
+}
+
+/* Specific adjustments for meter info box */
+.summary-box.meter-info p {
+	margin-bottom: 0;
+}
+.summary-box.meter-info p:first-of-type {
+	margin-bottom: 15px;
+}
+
+/* Additional styling for the multiplier list */
+.summary-box.meter-info .multiplier-list {
+	list-style-type: none; /* ลบจุดนำหน้าลิสต์ */
+	padding-left: 0; /* ลบ padding ด้านซ้าย */
+	margin-top: 10px;
+}
+
+.summary-box.meter-info .multiplier-list li {
+	background-color: #ebfffcc4;
+	border-radius: 8px;
+	padding: 10px 15px;
+	margin-bottom: 10px;
+	box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
+	line-height: 1.4;
+}
+
+.summary-box.meter-info .multiplier-list li strong {
+	font-size: 1.2em;
+	font-weight: 600;
+}
+
+.pagination-controls button {
+	background: #f0f0f3;
+	border: none;
+	border-radius: 50%; /* ให้เป็นวงกลม จะสวยขึ้น */
+	width: 40px;
+	height: 40px;
+	margin: 0 8px;
+	font-size: 18px;
+	font-weight: bold;
+	color: #333;
+	cursor: pointer;
+	box-shadow: 4px 4px 8px #c8c9cc, -4px -4px 8px #ffffff;
+	transition: all 0.2s ease-in-out;
+}
+
+.pagination-controls button:hover:not(:disabled) {
+	background: #e0e0e3;
+	transform: translateY(-2px);
+}
+
+.pagination-controls button:disabled {
+	cursor: not-allowed;
+	opacity: 0.5;
+	box-shadow: inset 2px 2px 4px #c8c9cc, inset -2px -2px 4px #ffffff;
+}
+
+.pagination-controls {
+	margin-top: 24px; /* ระยะห่างจากกล่องข้างบน */
+	margin-bottom: 32px; /* ระยะห่างจากกล่องข้างล่าง */
+	text-align: center;
+}
+
+.output-section {
+	margin-top: 40px; /* เพิ่มระยะห่างด้านบน */
+}
+
+@media (max-width: 768px) {
+	.controls {
+		display: none !important;
+	}
 }

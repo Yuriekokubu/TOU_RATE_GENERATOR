@@ -65,7 +65,7 @@
             </div>
         </div>
 
-        <div id="output"></div>
+        <div id="output" class="output-section"></div>
     </div>
 
     <script>
@@ -522,39 +522,18 @@
         }
 
 
+        let monthlyCurrentPage = 1;
+        const monthlyItemsPerPage = 7; // แสดง 12 เดือนต่อหน้า (ปรับได้)
+
         function renderMonthlySummaryTable(monthlySummariesToRender, monthlyMaxValuesToRender) {
             if (!isProcessed || Object.keys(monthlySummariesToRender).length === 0) {
                 return `
-                    <div class="summary-section">
-                        <h2 class="section-title">สรุปข้อมูลการใช้พลังงานรายเดือน</h2>
-                        <p>ไม่พบข้อมูลการใช้พลังงานสำหรับประเภท AR ที่เลือก</p>
-                    </div>
-                `;
-            }
-
-            let monthlyTableHtml = `
-                <div class="summary-section">
+            <div class="summary-section">
                 <h2 class="section-title">สรุปข้อมูลการใช้พลังงานรายเดือน</h2>
-                <div class="monthly-summary-table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>เดือน/ปี</th>
-                            <th>kWh (รวม)</th>
-                            <th>kWh (Peak)</th>
-                            <th>kWh (Off-Peak)</th>
-                            <th>kWh (Holiday)</th>
-                            <th>kW Max(Peak)</th>
-                            <th>kW Max(Off-Peak)</th>
-                            <th>kW Max(Holiday)</th>
-                            <th>kVar Max(รวมทุกเรท)</th>
-                            <th>เวลา kW (peak) สูงสุด</th>
-                            <th>เวลา kW (Off-Peak) สูงสุด</th>
-                            <th>เวลา kW (Holiday) สูงสุด</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
+                <p>ไม่พบข้อมูลการใช้พลังงานสำหรับประเภท AR ที่เลือก</p>
+            </div>
+        `;
+            }
 
             const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
             const sortedMonthKeys = Object.keys(monthlySummariesToRender).sort((a, b) => {
@@ -564,11 +543,41 @@
                 return monthA - monthB;
             });
 
+            const totalPages = Math.ceil(sortedMonthKeys.length / monthlyItemsPerPage);
+            if (monthlyCurrentPage > totalPages) monthlyCurrentPage = totalPages;
+
+            const startIndex = (monthlyCurrentPage - 1) * monthlyItemsPerPage;
+            const endIndex = startIndex + monthlyItemsPerPage;
+            const monthKeysToShow = sortedMonthKeys.slice(startIndex, endIndex);
+
+            let monthlyTableHtml = `
+        <div class="summary-section">
+        <h2 class="section-title">สรุปข้อมูลการใช้พลังงานรายเดือน</h2>
+        <div class="monthly-summary-table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>เดือน/ปี</th>
+                    <th>kWh (รวม)</th>
+                    <th>kWh (Peak)</th>
+                    <th>kWh (Off-Peak)</th>
+                    <th>kWh (Holiday)</th>
+                    <th>kW Max(Peak)</th>
+                    <th>kW Max(Off-Peak)</th>
+                    <th>kW Max(Holiday)</th>
+                    <th>kVar Max(รวมทุกเรท)</th>
+                    <th>เวลา kW (peak) สูงสุด</th>
+                    <th>เวลา kW (Off-Peak) สูงสุด</th>
+                    <th>เวลา kW (Holiday) สูงสุด</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
             const decimalPlacesForKwhSummary = 2;
             const decimalPlacesForKwSummary = 3;
 
-
-            sortedMonthKeys.forEach(monthKey => {
+            monthKeysToShow.forEach(monthKey => {
                 const [yearStr, monthStr] = monthKey.split('-');
                 const year = parseInt(yearStr);
                 const monthIndex = parseInt(monthStr) - 1;
@@ -595,30 +604,44 @@
                 const displayMaxKvarMonthOverall = customRound(baseMaxKvarMonthOverall, decimalPlacesForKwSummary);
 
                 monthlyTableHtml += `
-                    <tr>
-                        <td>${monthNames[monthIndex]} ${year + 543}</td>
-                        <td>${displayTotalWhMonth.toFixed(decimalPlacesForKwhSummary)}</td>
-                        <td>${displayPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
-                        <td>${displayOffPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
-                        <td>${displayHolidayWh.toFixed(decimalPlacesForKwhSummary)}</td>
-                        <td>${displayPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
-                        <td>${displayOffPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
-                        <td>${displayHolidayKw.toFixed(decimalPlacesForKwSummary)}</td>
-                        <td>${displayMaxKvarMonthOverall.toFixed(decimalPlacesForKwSummary)}</td>
-                        <td><small>${currentMonthMax['Peak'].wh_datetime || 'N/A'}</small></td>
-                        <td><small>${currentMonthMax['Off-peak'].wh_datetime || 'N/A'}</small></td>
-                        <td><small>${currentMonthMax['Holiday'].wh_datetime || 'N/A'}</small></td>
-                    </tr>
-                `;
+            <tr>
+                <td>${monthNames[monthIndex]} ${year + 543}</td>
+                <td>${displayTotalWhMonth.toFixed(decimalPlacesForKwhSummary)}</td>
+                <td>${displayPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                <td>${displayOffPeakWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                <td>${displayHolidayWh.toFixed(decimalPlacesForKwhSummary)}</td>
+                <td>${displayPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
+                <td>${displayOffPeakKw.toFixed(decimalPlacesForKwSummary)}</td>
+                <td>${displayHolidayKw.toFixed(decimalPlacesForKwSummary)}</td>
+                <td>${displayMaxKvarMonthOverall.toFixed(decimalPlacesForKwSummary)}</td>
+                <td><small>${currentMonthMax['Peak'].wh_datetime || 'N/A'}</small></td>
+                <td><small>${currentMonthMax['Off-peak'].wh_datetime || 'N/A'}</small></td>
+                <td><small>${currentMonthMax['Holiday'].wh_datetime || 'N/A'}</small></td>
+            </tr>
+        `;
             });
 
             monthlyTableHtml += `
-                    </tbody>
-                </table>
-                </div>
-                </div>
-            `;
+            </tbody>
+        </table>
+        </div>
+    `;
+
+            monthlyTableHtml += `
+    <div class="pagination-controls">
+        <button onclick="changeMonthlyPage(-1)" ${monthlyCurrentPage === 1 ? 'disabled' : ''}>&lt;</button>
+        <span>หน้า ${monthlyCurrentPage} / ${totalPages}</span>
+        <button onclick="changeMonthlyPage(1)" ${monthlyCurrentPage === totalPages ? 'disabled' : ''}>&gt;</button>
+    </div>
+    </div>
+`;
+
             return monthlyTableHtml;
+        }
+
+        function changeMonthlyPage(direction) {
+            monthlyCurrentPage += direction;
+            updateDisplay(); // re-render ใหม่
         }
 
 
@@ -745,7 +768,6 @@
                 const currentMultiplier = applyMultiplier ? r.rowMultiplier : 1;
 
                 if (unitType === 'kw_kvar') {
-                    // **แก้ไขจุดที่ 1: การคำนวณค่าสูงสุดรวม**
                     const currentCalculatedKwBase = (Math.round(rawWh * 4) / 1000) * currentMultiplier;
                     const currentCalculatedKvarBase = (Math.round(rawVarh * 4) / 1000) * currentMultiplier;
 
@@ -786,7 +808,6 @@
             mainSummaryHtml += '<div class="rate-summary-container">';
 
             if (unitType === 'kw_kvar') {
-                // **แก้ไขจุดที่ 2: การแสดงผลค่าสูงสุดรวม**
                 const displayOverallMaxKw = customRound(overallMaxBaseKwCalculated.value, decimalPlacesForSummary);
                 const displayOverallMaxKvar = customRound(overallMaxBaseKvarCalculated.value, decimalPlacesForSummary);
 
@@ -842,48 +863,6 @@
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].wh_datetime : 'N/A'}</small></p>
                 <p>kVar: <strong>${displayHolidayMaxKvar !== 'N/A' ? displayHolidayMaxKvar.toFixed(decimalPlacesForSummary) : 'N/A'} ${varhUnit}</strong><br>
                 <small>เมื่อ: ${selectedMonthYear !== 'all' && monthlyMaxValues[selectedMonthYear] && monthlyMaxValues[selectedMonthYear]['Holiday'] ? monthlyMaxValues[selectedMonthYear]['Holiday'].varh_datetime : 'N/A'}</small></p>
-            </div>
-        `;
-            } else {
-                let displayPeakWh = 0, displayPeakVarh = 0;
-                let displayOffPeakWh = 0, displayOffPeakVarh = 0;
-                let displayHolidayWh = 0, displayHolidayVarh = 0;
-                let displayTotalWh = 0, displayTotalVarh = 0;
-
-                if (selectedMonthYear !== 'all' && monthlySummaries[selectedMonthYear]) {
-                    const selectedMonthSummary = monthlySummaries[selectedMonthYear];
-                    displayPeakWh = selectedMonthSummary['Peak'].wh / 1000;
-                    displayPeakVarh = selectedMonthSummary['Peak'].varh / 1000;
-                    displayOffPeakWh = selectedMonthSummary['Off-peak'].wh / 1000;
-                    displayOffPeakVarh = selectedMonthSummary['Off-peak'].varh / 1000;
-                    displayHolidayWh = selectedMonthSummary['Holiday'].wh / 1000;
-                    displayHolidayVarh = selectedMonthSummary['Holiday'].varh / 1000;
-
-                    displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
-                    displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
-                } else if (selectedMonthYear === 'all') {
-                    for (const monthKey in monthlySummaries) {
-                        if (monthlySummaries.hasOwnProperty(monthKey)) {
-                            const monthSummary = monthlySummaries[monthKey];
-                            displayPeakWh += monthSummary['Peak'].wh / 1000;
-                            displayPeakVarh += monthSummary['Peak'].varh / 1000;
-                            displayOffPeakWh += monthSummary['Off-peak'].wh / 1000;
-                            displayOffPeakVarh += monthSummary['Off-peak'].varh / 1000;
-                            displayHolidayWh += monthSummary['Holiday'].wh / 1000;
-                            displayHolidayVarh += monthSummary['Holiday'].varh / 1000;
-                        }
-                    }
-                    displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
-                    displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
-                }
-
-                mainSummaryHtml += `
-            <div class="summary-box consumption-summary">
-                <h3>สรุปการใช้พลังงาน (รวม)</h3>
-                <p>รวม Peak: <strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p>รวม Off-peak: <strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p>รวม Holiday: <strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
-                <p class="total-overall">รวมทั้งหมด: <strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
             </div>
         `;
             }
@@ -1056,6 +1035,7 @@
             const selectedMonthYear = document.getElementById('monthYearSelector').value;
             const selectedArType = document.getElementById('arTypeSelector').value;
             const selectedUnit = document.getElementById('unitSelector').value;
+            const applyMultiplier = document.getElementById('applyMultiplier').checked;
 
             console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}`);
 
@@ -1068,18 +1048,17 @@
             monthlySummaries = calculatedMonthlySummaries;
             monthlyMaxValues = calculatedMonthlyMaxValues;
 
-
+            // ย้ายโค้ดส่วนนี้ขึ้นมาอยู่บนสุด
             outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues);
 
             const summaryBoxWrapper = document.createElement('div');
-            summaryBoxWrapper.className = 'summary-box-wrapper';
+            summaryBoxWrapper.className = 'summary-box-wrapper column-layout';
 
-            // โค้ดที่เพิ่มและแก้ไขในส่วนนี้
             let multiplierInfoHtml = '<p>ข้อมูลตัวคูณ: <strong>N/A</strong></p>';
             if (globalResults.length > 0) {
                 const multiplierRanges = {};
                 globalResults.forEach(r => {
-                    const multiplier = r.rowMultiplier.toFixed(4); // ใช้ค่าตัวคูณที่ปัดเศษแล้ว
+                    const multiplier = r.rowMultiplier.toFixed(4);
                     const datetime = r.datetime;
                     if (!multiplierRanges[multiplier]) {
                         multiplierRanges[multiplier] = {
@@ -1087,7 +1066,6 @@
                             end: datetime
                         };
                     } else {
-                        // อัปเดตช่วงเวลาเริ่มต้นและสิ้นสุด
                         if (new Date(datetime) < new Date(multiplierRanges[multiplier].start)) {
                             multiplierRanges[multiplier].start = datetime;
                         }
@@ -1098,24 +1076,27 @@
                 });
 
                 if (Object.keys(multiplierRanges).length > 0) {
-                    let rangesHtml = '<ul>';
+                    let rangesHtml = '<ul class="multiplier-list">';
                     for (const mult in multiplierRanges) {
                         if (multiplierRanges.hasOwnProperty(mult)) {
                             const range = multiplierRanges[mult];
-                            rangesHtml += `<li>ตัวคูณ <strong>${mult}</strong> ตั้งแต่ ${range.start} ถึง ${range.end}</li>`;
+                            rangesHtml += `<li><strong>ตัวคูณ ${mult}</strong><br>ตั้งแต่ ${range.start}<br>ถึง ${range.end}</li>`;
                         }
                     }
                     rangesHtml += '</ul>';
-                    multiplierInfoHtml = `<p>ข้อมูลตัวคูณ:</p>${rangesHtml}`;
+                    multiplierInfoHtml = `<div class="multiplier-info">
+                <p><strong>ข้อมูลตัวคูณ:</strong></p>
+                ${rangesHtml}
+            </div>`;
                 }
             }
 
             const meterInfoHtml = `
-                <div class="summary-box meter-info">
-                    <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
-                    <p>หมายเลขมิเตอร์: <strong>${meterNumber || 'N/A'}</strong></p>
-                    ${multiplierInfoHtml}
-                </div>`;
+        <div class="summary-box meter-info">
+            <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
+            <p>หมายเลขมิเตอร์: <strong>${meterNumber || 'N/A'}</strong></p>
+            ${multiplierInfoHtml}
+        </div>`;
             summaryBoxWrapper.innerHTML += meterInfoHtml;
 
             const billingPeriodInfoDiv = document.createElement('div');
@@ -1144,30 +1125,72 @@
                     };
 
                     billingPeriodInfoDiv.innerHTML = `
-                        <h3>ช่วงเวลาบิลลิ่ง</h3>
-                        <p>สำหรับเดือนที่เลือก (${selectedMonthYear}):</p>
-                        <p>ตั้งแต่: <strong>${formatDateTime(startDate)}</strong></p>
-                        <p>ถึง: <strong>${formatDateTime(endDate)}</strong></p>
-                    `;
+                <h3>ช่วงเวลาบิลลิ่ง</h3>
+                <p>สำหรับเดือนที่เลือก (${selectedMonthYear}):</p>
+                <p>ตั้งแต่: <strong>${formatDateTime(startDate)}</strong></p>
+                <p>ถึง: <strong>${formatDateTime(endDate)}</strong></p>
+            `;
                 } else {
                     console.warn("[updateDisplay] Could not calculate billing period dates for display.");
                     billingPeriodInfoDiv.innerHTML = `
-                        <h3>ช่วงเวลาบิลลิ่ง</h3>
-                        <p>ไม่สามารถคำนวณช่วงเวลาบิลลิ่งได้สำหรับเดือนที่เลือก</p>
-                    `;
+                <h3>ช่วงเวลาบิลลิ่ง</h3>
+                <p>ไม่สามารถคำนวณช่วงเวลาบิลลิ่งได้สำหรับเดือนที่เลือก</p>
+            `;
                 }
             } else {
                 billingPeriodInfoDiv.innerHTML = `
-                    <h3>ช่วงเวลาบิลลิ่ง</h3>
-                    <p>แสดงข้อมูลทั้งหมดที่มีในไฟล์</p>
-                    <p>ค่าในตารางสรุปรายเดือน คำนวณตามประเภท AR "${selectedArType}"</p>
-                `;
+            <h3>ช่วงเวลาบิลลิ่ง</h3>
+            <p>แสดงข้อมูลทั้งหมดที่มีในไฟล์</p>
+            <p>ค่าในตารางสรุปรายเดือน คำนวณตามประเภท AR "${selectedArType}"</p>
+        `;
             }
             summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
 
+            const consumptionSummaryDiv = document.createElement('div');
+            consumptionSummaryDiv.className = 'summary-box consumption-summary';
+            let displayPeakWh = 0, displayPeakVarh = 0;
+            let displayOffPeakWh = 0, displayOffPeakVarh = 0;
+            let displayHolidayWh = 0, displayHolidayVarh = 0;
+            let displayTotalWh = 0, displayTotalVarh = 0;
+            const decimalPlacesForSummary = 2;
+
+            if (selectedMonthYear !== 'all' && monthlySummaries[selectedMonthYear]) {
+                const selectedMonthSummary = monthlySummaries[selectedMonthYear];
+                displayPeakWh = selectedMonthSummary['Peak'].wh / 1000;
+                displayPeakVarh = selectedMonthSummary['Peak'].varh / 1000;
+                displayOffPeakWh = selectedMonthSummary['Off-peak'].wh / 1000;
+                displayOffPeakVarh = selectedMonthSummary['Off-peak'].varh / 1000;
+                displayHolidayWh = selectedMonthSummary['Holiday'].wh / 1000;
+                displayHolidayVarh = selectedMonthSummary['Holiday'].varh / 1000;
+
+                displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+            } else if (selectedMonthYear === 'all') {
+                for (const monthKey in monthlySummaries) {
+                    if (monthlySummaries.hasOwnProperty(monthKey)) {
+                        const monthSummary = monthlySummaries[monthKey];
+                        displayPeakWh += monthSummary['Peak'].wh / 1000;
+                        displayPeakVarh += monthSummary['Peak'].varh / 1000;
+                        displayOffPeakWh += monthSummary['Off-peak'].wh / 1000;
+                        displayOffPeakVarh += monthSummary['Off-peak'].varh / 1000;
+                        displayHolidayWh += monthSummary['Holiday'].wh / 1000;
+                        displayHolidayVarh += monthSummary['Holiday'].varh / 1000;
+                    }
+                }
+                displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+            }
+
+            consumptionSummaryDiv.innerHTML = `
+        <h3>สรุปการใช้พลังงาน (รวม)</h3>
+        <p>รวม Peak: <strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+        <p>รวม Off-peak: <strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+        <p>รวม Holiday: <strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+        <p class="total-overall">รวมทั้งหมด: <strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></p>
+    `;
+            summaryBoxWrapper.appendChild(consumptionSummaryDiv);
 
             outputDiv.appendChild(summaryBoxWrapper);
-
 
             outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType);
 
