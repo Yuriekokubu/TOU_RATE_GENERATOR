@@ -5,8 +5,10 @@
     <meta charset="UTF-8">
     <title>ตรวจสอบเรทไฟฟ้า</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="icon" type="image/png" href="favicon.png"> 
+    <link rel="icon" type="image/png" href="favicon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="./holiday_results/holiday_2022.js"></script>
     <script src="./holiday_results/holiday_2023.js"></script>
     <script src="./holiday_results/holiday_2024.js"></script>
@@ -58,8 +60,8 @@
                 <label for="dataTypeSelector">Import/Export:</label>
                 <div class="select-wrapper">
                     <select id="dataTypeSelector" onchange="updateDisplay()">
-                        <option value="wh_import">Wh Import</option>
-                        <option value="wh_export">Wh Export</option>
+                        <option value="wh_import">Import</option>
+                        <option value="wh_export">Export</option>
                     </select>
                 </div>
             </div>
@@ -74,6 +76,10 @@
             <div class="control-group">
                 <button id="exportExcel" class="button">Export Data to Excel</button>
             </div>
+        </div>
+
+        <div id="detail-chart-container" class="large-chart-container" style="margin-top: 20px;">
+            <canvas id="detailLineChart"></canvas>
         </div>
 
         <div id="output" class="output-section"></div>
@@ -1094,6 +1100,7 @@
             reader.readAsArrayBuffer(file);
         }
 
+
         function updateDisplay() {
             if (!isProcessed) {
                 return;
@@ -1103,12 +1110,12 @@
             const selectedArType = document.getElementById('arTypeSelector').value;
             const selectedUnit = document.getElementById('unitSelector').value;
             const selectedDataType = document.getElementById('dataTypeSelector').value;
-            const applyMultiplier = document.getElementById('applyMultiplier').checked;
+            const applyMultiplier = document.getElementById('applyMultiplier').checked; // ดึงค่าตัวคูณ
 
             console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}, Data Type: ${selectedDataType}`);
 
             const outputDiv = document.getElementById('output');
-            outputDiv.innerHTML = '';
+            outputDiv.innerHTML = ''; // ล้างเนื้อหาเก่าใน outputDiv
 
             const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
                 calculateAllMonthsSummariesAndMaxes(selectedArType, selectedDataType);
@@ -1116,10 +1123,13 @@
             monthlySummaries = calculatedMonthlySummaries;
             monthlyMaxValues = calculatedMonthlyMaxValues;
 
+            // ตารางสรุปรายเดือน
             outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues, selectedDataType);
 
             const summaryBoxWrapper = document.createElement('div');
             summaryBoxWrapper.className = 'summary-box-wrapper column-layout';
+
+            // ... (โค้ดส่วน Meter Info และ Multiplier Ranges) ...
 
             let multiplierInfoHtml = '<p>ข้อมูลตัวคูณ: <strong>N/A</strong></p>';
             if (globalResults.length > 0) {
@@ -1165,6 +1175,8 @@
             ${multiplierInfoHtml}
         </div>`;
             summaryBoxWrapper.innerHTML += meterInfoHtml;
+
+            // ... (โค้ดส่วน Interval Check) ...
 
             // START: MODIFIED CODE FOR INTERVAL CHECK
             const billingPeriodInfoDiv = document.createElement('div');
@@ -1283,10 +1295,189 @@
 
             outputDiv.appendChild(summaryBoxWrapper);
 
-            outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType, selectedDataType);
+            // แสดงตารางรายละเอียด 15 นาที
+            // (เพิ่ม applyMultiplier เข้าไปในโค้ดตามที่เคยแก้ไขเพื่อให้ตารางแสดงค่าที่ถูกต้อง)
+            outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType, selectedDataType, applyMultiplier);
 
             updateExportButtonVisibility();
+
+            // วาดกราฟ (ใช้ Canvas ที่มีอยู่ใน HTML หลัก)
             updateCharts();
+        }
+
+        // *****************************************************************
+        // เพิ่มตัวแปร Global สำหรับเก็บ Instance ของ Chart.js
+        // ****************************************************************
+
+        let detailChartInstance = null;
+
+        // *****************************************************************
+        // เพิ่มฟังก์ชัน updateCharts()
+        // *****************************************************************
+        function updateCharts() {
+            // 1. ดึงค่าจากตัวควบคุมทั้งหมด
+            const selectedMonthYear = document.getElementById('monthYearSelector').value;
+            const selectedDataType = document.getElementById('dataTypeSelector').value;
+            const selectedArType = document.getElementById('arTypeSelector').value;
+            const selectedUnit = document.getElementById('unitSelector').value;
+            const applyMultiplier = document.getElementById('applyMultiplier').checked;
+
+            // ตรวจสอบเงื่อนไขการทำงาน
+            if (!isProcessed || Object.keys(monthlySummaries).length === 0) {
+                const detailChartContainer = document.getElementById('detail-chart-container');
+                if (detailChartContainer) detailChartContainer.style.display = 'none';
+                return;
+            }
+
+            const detailChartElement = document.getElementById('detailLineChart');
+            const detailChartContainer = document.getElementById('detail-chart-container');
+            if (!detailChartElement) return;
+            const ctxDetail = detailChartElement.getContext('2d');
+
+            if (detailChartInstance) detailChartInstance.destroy();
+
+            // ไม่แสดงกราฟถ้าเลือก 'ทั้งหมด'
+            if (selectedMonthYear === 'all') {
+                detailChartContainer.style.display = 'none';
+                return;
+            }
+
+            // 2. กรองข้อมูลตามเดือนที่เลือก
+            const [yearStr, monthStr] = selectedMonthYear.split('-');
+            const selectedMonthInt = parseInt(monthStr);
+            const selectedYearInt = parseInt(yearStr);
+
+            const filteredResults = globalResults.filter(r => {
+                return isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
+            });
+
+            if (filteredResults.length === 0) {
+                detailChartContainer.style.display = 'none';
+                return;
+            }
+
+            // 3. เตรียมข้อมูลและสูตรคำนวณ
+            const labels = [];
+            const dataCombined = [];
+
+            let detailChartYAxisLabel = '';
+            let detailChartTitle = '';
+            let decimalPlacesForDetailChart = 5;
+            let calculationFunction;
+
+            const isWhData = selectedDataType.includes('wh');
+
+            // 4. กำหนดสูตรการคำนวณและ Y-Axis Label
+            if (selectedUnit === 'kw_kvar') {
+                // โหมด kW / kVAR
+                decimalPlacesForDetailChart = 3;
+                // สูตร: (Wh_raw * Multiplier * 4) / 1000 -> kW
+                calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier * 4) / 1000, decimalPlacesForDetailChart);
+
+                // ** แก้ไข Label เพื่อระบุ Import/Export ให้ชัดเจน **
+                detailChartYAxisLabel = isWhData
+                    ? (selectedDataType === 'wh_import' ? 'kW (Import)' : 'kW (Export)')
+                    : (selectedDataType === 'varh_import' ? 'kVAR (Import)' : 'kVAR (Export)');
+
+            } else { // kwh_kvarh
+                // โหมด kWh / kVARh
+                decimalPlacesForDetailChart = 5;
+                // สูตร: (Wh_raw * Multiplier) / 1000 -> kWh
+                calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier) / 1000, decimalPlacesForDetailChart);
+
+                // ** แก้ไข Label เพื่อระบุ Import/Export ให้ชัดเจน **
+                detailChartYAxisLabel = isWhData
+                    ? (selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)')
+                    : (selectedDataType === 'varh_import' ? 'kVARh (Import)' : 'kVARh (Export)');
+            }
+
+            detailChartTitle = `ข้อมูลราย 15 นาที (${detailChartYAxisLabel}) สำหรับ ${document.getElementById('monthYearSelector').options[document.getElementById('monthYearSelector').selectedIndex].text}`;
+
+
+            // 5. วนลูปข้อมูลเพื่อคำนวณและเตรียม Dataset
+            filteredResults.forEach(r => {
+                const rawValue = isWhData
+                    ? (selectedDataType === 'wh_import' ? r.originalWhImportValue : r.originalWhExportValue)
+                    : r.originalVarhValue || 0;
+
+                const currentMultiplier = applyMultiplier ? r.rowMultiplier : 1;
+
+                labels.push(r.datetime.substring(5, 16));
+
+                let value = calculationFunction(rawValue, currentMultiplier);
+
+                // ** แก้ไข: ใส่ค่าบวกเสมอ **
+                dataCombined.push(value);
+            });
+
+            // 6. สร้างกราฟเส้นใหม่
+            detailChartInstance = new Chart(ctxDetail, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: detailChartYAxisLabel,
+                            data: dataCombined,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            pointRadius: 0,
+                            pointHitRadius: 0,
+                            borderWidth: 1.5,
+                            tension: 0.2,
+                            spanGaps: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: { display: true, text: detailChartTitle, font: { size: 16 } },
+                        legend: { display: false },
+                        tooltip: {
+                            mode: 'index',
+                            intersect: false,
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (context.parsed.y !== null) {
+                                        // แสดงค่าเป็นบวก และใช้ Label แกน Y ที่ชัดเจน
+                                        const displayValue = context.parsed.y;
+                                        label = `${detailChartYAxisLabel}: ${displayValue.toLocaleString('en-US', { minimumFractionDigits: decimalPlacesForDetailChart, maximumFractionDigits: decimalPlacesForDetailChart })}`;
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        zoom: {
+                            pan: { enabled: true, mode: 'x' },
+                            zoom: {
+                                wheel: { enabled: true },
+                                pinch: { enabled: true },
+                                mode: 'x'
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'วันเวลา' },
+                            ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
+                        },
+                        y: {
+                            beginAtZero: true, // ทำให้กราฟเริ่มจาก 0 เสมอ
+                            title: { display: true, text: detailChartYAxisLabel },
+                            ticks: {
+                                callback: function (value) {
+                                    return value.toFixed(decimalPlacesForDetailChart);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            detailChartContainer.style.display = 'block';
         }
 
         function exportTableToExcel() {
@@ -1464,6 +1655,8 @@
             }
         }
         document.addEventListener('DOMContentLoaded', updateExportButtonVisibility);
+
+
     </script>
 </body>
 

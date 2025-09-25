@@ -583,5 +583,16 @@ tbody tr:hover {
 	font-size: 1em;
 }
 
-
+/* ใช้คลาสนี้ในการควบคุมขนาดกราฟหลัก */
+.large-chart-container {
+    height: 400px; /* เพิ่มความสูงเพื่อให้กราฟใหญ่ตามต้องการ */
+    margin: 20px auto;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #fff;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    display: none; /* เริ่มต้นซ่อนไว้ และให้ JS จัดการแสดงผล */
+}
+/* ถ้าคุณมี .chart-container เดิม ควรลบออกหรือรวมไปที่นี่ */
 
