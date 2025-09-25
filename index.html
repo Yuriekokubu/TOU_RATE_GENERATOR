@@ -1359,6 +1359,8 @@
             // 3. เตรียมข้อมูลและสูตรคำนวณ
             const labels = [];
             const dataCombined = [];
+            // *** เพิ่ม: อาร์เรย์สำหรับเก็บเรท ***
+            const dataRates = [];
 
             let detailChartYAxisLabel = '';
             let detailChartTitle = '';
@@ -1369,23 +1371,17 @@
 
             // 4. กำหนดสูตรการคำนวณและ Y-Axis Label
             if (selectedUnit === 'kw_kvar') {
-                // โหมด kW / kVAR
                 decimalPlacesForDetailChart = 3;
-                // สูตร: (Wh_raw * Multiplier * 4) / 1000 -> kW
                 calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier * 4) / 1000, decimalPlacesForDetailChart);
 
-                // ** แก้ไข Label เพื่อระบุ Import/Export ให้ชัดเจน **
                 detailChartYAxisLabel = isWhData
                     ? (selectedDataType === 'wh_import' ? 'kW (Import)' : 'kW (Export)')
                     : (selectedDataType === 'varh_import' ? 'kVAR (Import)' : 'kVAR (Export)');
 
             } else { // kwh_kvarh
-                // โหมด kWh / kVARh
                 decimalPlacesForDetailChart = 5;
-                // สูตร: (Wh_raw * Multiplier) / 1000 -> kWh
                 calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier) / 1000, decimalPlacesForDetailChart);
 
-                // ** แก้ไข Label เพื่อระบุ Import/Export ให้ชัดเจน **
                 detailChartYAxisLabel = isWhData
                     ? (selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)')
                     : (selectedDataType === 'varh_import' ? 'kVARh (Import)' : 'kVARh (Export)');
@@ -1406,7 +1402,9 @@
 
                 let value = calculationFunction(rawValue, currentMultiplier);
 
-                // ** แก้ไข: ใส่ค่าบวกเสมอ **
+                // ** เพิ่ม: เก็บข้อมูล Rate และค่าบวก **
+                const rate = getRate(r.dateObject); // สมมติว่าฟังก์ชันนี้มีอยู่
+                dataRates.push(rate);
                 dataCombined.push(value);
             });
 
@@ -1440,13 +1438,23 @@
                             intersect: false,
                             callbacks: {
                                 label: function (context) {
-                                    let label = context.dataset.label || '';
+                                    // ดึงดัชนีของจุดข้อมูลปัจจุบัน
+                                    const dataIndex = context.dataIndex;
+                                    // ดึงเรทที่ถูกเก็บไว้ใน dataRates
+                                    const rate = dataRates[dataIndex] || 'ไม่ทราบเรท';
+
+                                    // Label สำหรับค่า (เช่น: kWh (Import): 12.345)
+                                    let valueLabel = context.dataset.label || '';
                                     if (context.parsed.y !== null) {
-                                        // แสดงค่าเป็นบวก และใช้ Label แกน Y ที่ชัดเจน
                                         const displayValue = context.parsed.y;
-                                        label = `${detailChartYAxisLabel}: ${displayValue.toLocaleString('en-US', { minimumFractionDigits: decimalPlacesForDetailChart, maximumFractionDigits: decimalPlacesForDetailChart })}`;
+                                        valueLabel = `${valueLabel}: ${displayValue.toLocaleString('en-US', { minimumFractionDigits: decimalPlacesForDetailChart, maximumFractionDigits: decimalPlacesForDetailChart })}`;
                                     }
-                                    return label;
+
+                                    // ** สร้าง Label สำหรับ Rate **
+                                    const rateLabel = `เรท: ${rate}`;
+
+                                    // คืนค่าอาร์เรย์ของ Label: [เรท, ค่า]
+                                    return [rateLabel, valueLabel];
                                 }
                             }
                         },
@@ -1465,7 +1473,7 @@
                             ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
                         },
                         y: {
-                            beginAtZero: true, // ทำให้กราฟเริ่มจาก 0 เสมอ
+                            beginAtZero: true,
                             title: { display: true, text: detailChartYAxisLabel },
                             ticks: {
                                 callback: function (value) {
