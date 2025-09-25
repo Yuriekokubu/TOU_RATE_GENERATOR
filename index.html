@@ -3,8 +3,9 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>ตรวจสอบเรทไฟฟ้า (Neumorphism)</title>
+    <title>ตรวจสอบเรทไฟฟ้า</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="favicon.png"> 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="./holiday_results/holiday_2022.js"></script>
     <script src="./holiday_results/holiday_2023.js"></script>
@@ -33,7 +34,7 @@
             </div>
 
             <div class="control-group">
-                <label for="arTypeSelector">เลือกประเภท AR:</label>
+                <label for="arTypeSelector">เลือกประเภท Portion:</label>
                 <div class="select-wrapper">
                     <select id="arTypeSelector" onchange="updateDisplay()">
                         <option value="AR1">AR1</option>
@@ -54,7 +55,7 @@
             </div>
 
             <div class="control-group">
-                <label for="dataTypeSelector">เลือกข้อมูล:</label>
+                <label for="dataTypeSelector">Import/Export:</label>
                 <div class="select-wrapper">
                     <select id="dataTypeSelector" onchange="updateDisplay()">
                         <option value="wh_import">Wh Import</option>
@@ -1097,6 +1098,7 @@
             if (!isProcessed) {
                 return;
             }
+
             const selectedMonthYear = document.getElementById('monthYearSelector').value;
             const selectedArType = document.getElementById('arTypeSelector').value;
             const selectedUnit = document.getElementById('unitSelector').value;
@@ -1114,7 +1116,6 @@
             monthlySummaries = calculatedMonthlySummaries;
             monthlyMaxValues = calculatedMonthlyMaxValues;
 
-            // ย้ายโค้ดส่วนนี้ขึ้นมาอยู่บนสุด
             outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues, selectedDataType);
 
             const summaryBoxWrapper = document.createElement('div');
@@ -1165,52 +1166,59 @@
         </div>`;
             summaryBoxWrapper.innerHTML += meterInfoHtml;
 
+            // START: MODIFIED CODE FOR INTERVAL CHECK
             const billingPeriodInfoDiv = document.createElement('div');
             billingPeriodInfoDiv.className = 'summary-box billing-period-info';
 
-            if (selectedMonthYear !== 'all') {
-                const [yearStr, monthStr] = selectedMonthYear.split('-');
-                const selectedMonthInt = parseInt(monthStr);
-                const selectedYearInt = parseInt(yearStr);
+            billingPeriodInfoDiv.innerHTML = '<h3>ข้อมูล Interval</h3>';
 
-                const {
-                    startDate,
-                    endDate
-                } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
+            const uniqueMonthYears = new Set();
+            globalResults.forEach(r => {
+                const { year, month } = getBKKTimeComponents(r.dateObject);
+                uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`);
+            });
 
-                if (startDate && endDate) {
-                    const formatDateTime = (dateObj) => {
-                        const bkkComponents = {
-                            year: dateObj.getUTCFullYear(),
-                            month: dateObj.getUTCMonth(),
-                            day: dateObj.getUTCDate(),
-                            hour: dateObj.getUTCHours(),
-                            minute: dateObj.getUTCMinutes()
-                        };
-                        return `${bkkComponents.day.toString().padStart(2, '0')}/${(bkkComponents.month + 1).toString().padStart(2, '0')}/${bkkComponents.year + 543} ${bkkComponents.hour.toString().padStart(2, '0')}:${bkkComponents.minute.toString().padStart(2, '0')}:00`;
-                    };
+            const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
+            const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-                    billingPeriodInfoDiv.innerHTML = `
-                <h3>ช่วงเวลาบิลลิ่ง</h3>
-                <p>สำหรับเดือนที่เลือก (${selectedMonthYear}):</p>
-                <p>ตั้งแต่: <strong>${formatDateTime(startDate)}</strong></p>
-                <p>ถึง: <strong>${formatDateTime(endDate)}</strong></p>
+            if (sortedUniqueMonthYears.length > 0) {
+                let intervalListHtml = '<ul class="interval-list">';
+
+                sortedUniqueMonthYears.forEach(monthKey => {
+                    const [yearStr, monthStr] = monthKey.split('-');
+                    const selectedMonthInt = parseInt(monthStr);
+                    const selectedYearInt = parseInt(yearStr);
+                    const monthName = monthNames[selectedMonthInt - 1];
+
+                    const numDaysInMonth = getDaysInMonth(selectedYearInt, selectedMonthInt);
+                    const expectedIntervals = numDaysInMonth * 96;
+                    let actualIntervals = 0;
+
+                    globalResults.forEach(r => {
+                        if (isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt)) {
+                            actualIntervals++;
+                        }
+                    });
+
+                    const statusClass = actualIntervals < expectedIntervals ? 'warning' : 'complete';
+                    const statusText = actualIntervals < expectedIntervals ? '⚠️' : '✅';
+
+                    intervalListHtml += `
+                <li class="${statusClass}">
+                    <strong>เดือน ${monthName} ${selectedYearInt + 543}:</strong>
+                    <span class="count">${actualIntervals} / ${expectedIntervals}</span>
+                    <span class="status">${statusText}</span>
+                </li>
             `;
-                } else {
-                    console.warn("[updateDisplay] Could not calculate billing period dates for display.");
-                    billingPeriodInfoDiv.innerHTML = `
-                <h3>ช่วงเวลาบิลลิ่ง</h3>
-                <p>ไม่สามารถคำนวณช่วงเวลาบิลลิ่งได้สำหรับเดือนที่เลือก</p>
-            `;
-                }
+                });
+
+                intervalListHtml += '</ul>';
+                billingPeriodInfoDiv.innerHTML += intervalListHtml;
             } else {
-                billingPeriodInfoDiv.innerHTML = `
-            <h3>ช่วงเวลาบิลลิ่ง</h3>
-            <p>แสดงข้อมูลทั้งหมดที่มีในไฟล์</p>
-            <p>ค่าในตารางสรุปรายเดือน คำนวณตามประเภท AR "${selectedArType}"</p>
-        `;
+                billingPeriodInfoDiv.innerHTML += `<p>ไม่พบข้อมูล Interval ในไฟล์</p>`;
             }
             summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
+            // END: MODIFIED CODE FOR INTERVAL CHECK
 
             const consumptionSummaryDiv = document.createElement('div');
             consumptionSummaryDiv.className = 'summary-box consumption-summary';
@@ -1250,26 +1258,27 @@
             const whTitle = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
 
             consumptionSummaryDiv.innerHTML = `
-    <h3>สรุปการใช้พลังงาน (รวม)</h3>
-    <div class="summary-list">
-        <div class="summary-list-item peak-row">
-            <span class="rate-label">รวม Peak:</span>
-            <span class="value-label"><strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+        <h3>สรุปการใช้พลังงาน (รวม)</h3>
+        <div class="summary-list">
+            <div class="summary-list-item peak-row">
+                <span class="rate-label">รวม Peak:</span>
+                <span class="value-label"><strong>${displayPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+            </div>
+            <div class="summary-list-item off-peak-row">
+                <span class="rate-label">รวม Off-peak:</span>
+                <span class="value-label"><strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+            </div>
+            <div class="summary-list-item holiday-row">
+                <span class="rate-label">รวม Holiday:</span>
+                <span class="value-label"><strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+            </div>
+            <div class="summary-list-item total-row">
+                <span class="rate-label">รวมทั้งหมด:</span>
+                <span class="value-label"><strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
+            </div>
         </div>
-        <div class="summary-list-item off-peak-row">
-            <span class="rate-label">รวม Off-peak:</span>
-            <span class="value-label"><strong>${displayOffPeakWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayOffPeakVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
-        </div>
-        <div class="summary-list-item holiday-row">
-            <span class="rate-label">รวม Holiday:</span>
-            <span class="value-label"><strong>${displayHolidayWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayHolidayVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
-        </div>
-        <div class="summary-list-item total-row">
-            <span class="rate-label">รวมทั้งหมด:</span>
-            <span class="value-label"><strong>${displayTotalWh.toFixed(decimalPlacesForSummary)} kWh</strong>, <strong>${displayTotalVarh.toFixed(decimalPlacesForSummary)} kVarh</strong></span>
-        </div>
-    </div>
-`;
+    `;
+
             summaryBoxWrapper.appendChild(consumptionSummaryDiv);
 
             outputDiv.appendChild(summaryBoxWrapper);
@@ -1277,6 +1286,7 @@
             outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType, selectedDataType);
 
             updateExportButtonVisibility();
+            updateCharts();
         }
 
         function exportTableToExcel() {
