@@ -52,6 +52,8 @@
                     <select id="unitSelector" onchange="updateDisplay()">
                         <option value="kwh_kvarh">kWh, kVarh</option>
                         <option value="kw_kvar">kW, kVar</option>
+                        <option value="voltage_abc">Voltage A, B, C (V)</option>
+                        <option value="current_abc">Current A, B, C (A)</option>
                     </select>
                 </div>
             </div>
@@ -967,7 +969,6 @@
             return mainSummaryHtml + tableHtml;
         }
 
-
         async function process() {
             if (isProcessed) {
                 console.log("File already processed. Skipping re-processing.");
@@ -997,6 +998,24 @@
                 let startRowForData = 3;
                 let rawDateCol, whImportCol, whExportCol, varhCol;
                 let isCompactFormat = false;
+
+                // **************************************************
+                // กำหนด Index สำหรับ Voltage A, B, C (เดิม)
+                // คอลัมน์ I = Index 8, คอลัมน์ J = Index 9, คอลัมน์ K = Index 10
+                // **************************************************
+                const voltageACol = 8;
+                const voltageBCol = 9;
+                const voltageCCol = 10;
+                // **************************************************
+
+                // **************************************************
+                // ✅ เพิ่ม: กำหนด Index สำหรับ Current A, B, C
+                // คอลัมน์ L = Index 11, คอลัมน์ M = Index 12, คอลัมน์ N = Index 13
+                // **************************************************
+                const currentACol = 11;
+                const currentBCol = 12;
+                const currentCCol = 13;
+                // **************************************************
 
                 const headerRowCompact = XLSX.utils.sheet_to_json(sheet, { header: 1, range: 'A1:C1' })[0];
                 // console.log("Header row for compact check:", headerRowCompact); // Commented out for cleaner console
@@ -1045,6 +1064,30 @@
                     const originalWhExportValue = whExportCol !== null ? parseFloat(rows[i][whExportCol]) || 0 : 0;
                     const originalVarhValue = parseFloat(rows[i][varhCol]) || 0;
 
+                    // **************************************************
+                    // โค้ดดึงข้อมูล Voltage (เดิม)
+                    // **************************************************
+                    let voltageA = 0;
+                    let voltageB = 0;
+                    let voltageC = 0;
+
+                    // ✅ เพิ่ม: ดึงข้อมูล Current
+                    let currentA = 0;
+                    let currentB = 0;
+                    let currentC = 0;
+
+                    if (!isCompactFormat) {
+                        voltageA = parseFloat(rows[i][voltageACol]) || 0; // คอลัมน์ I
+                        voltageB = parseFloat(rows[i][voltageBCol]) || 0; // คอลัมน์ J
+                        voltageC = parseFloat(rows[i][voltageCCol]) || 0; // คอลัมน์ K
+
+                        // ✅ ดึงข้อมูล Current เมื่อเป็น Standard Format
+                        currentA = parseFloat(rows[i][currentACol]) || 0; // คอลัมน์ L (Index 11)
+                        currentB = parseFloat(rows[i][currentBCol]) || 0; // คอลัมน์ M (Index 12)
+                        currentC = parseFloat(rows[i][currentCCol]) || 0; // คอลัมน์ N (Index 13)
+                    }
+                    // **************************************************
+
                     if (!rawDate || (isNaN(originalWhImportValue) && isNaN(originalWhExportValue)) || isNaN(originalVarhValue)) continue;
 
                     let dateObjectBKK = convertExcelDateToBKKUTCAdjusted(rawDate);
@@ -1086,7 +1129,20 @@
                         originalWhExportValue: originalWhExportValue,
                         originalVarhValue: originalVarhValue,
                         dateObject: roundedDateObjectUTC,
-                        rowMultiplier: rowMultiplier // เพิ่มค่า rowMultiplier เข้าไปใน object ของแต่ละแถว
+                        rowMultiplier: rowMultiplier,
+
+                        // ข้อมูล Voltage (เดิม)
+                        voltage_a: voltageA,
+                        voltage_b: voltageB,
+                        voltage_c: voltageC,
+
+                        // **************************************************
+                        // ✅ เพิ่ม: ข้อมูล Current เข้าไปใน globalResults
+                        // **************************************************
+                        current_a: currentA,
+                        current_b: currentB,
+                        current_c: currentC
+                        // **************************************************
                     });
                 }
 
@@ -1099,6 +1155,7 @@
             };
             reader.readAsArrayBuffer(file);
         }
+
 
 
         function updateDisplay() {
@@ -1312,7 +1369,7 @@
         let detailChartInstance = null;
 
         // *****************************************************************
-        // เพิ่มฟังก์ชัน updateCharts()
+        // ฟังก์ชัน updateCharts() ฉบับแก้ไขให้กราฟ Voltage เริ่มต้นที่ 0
         // *****************************************************************
         function updateCharts() {
             // 1. ดึงค่าจากตัวควบคุมทั้งหมด
@@ -1322,7 +1379,7 @@
             const selectedUnit = document.getElementById('unitSelector').value;
             const applyMultiplier = document.getElementById('applyMultiplier').checked;
 
-            // ตรวจสอบเงื่อนไขการทำงาน
+            // ตรวจสอบเงื่อนไขการทำงาน (สมมติว่า isProcessed และ monthlySummaries มีอยู่)
             if (!isProcessed || Object.keys(monthlySummaries).length === 0) {
                 const detailChartContainer = document.getElementById('detail-chart-container');
                 if (detailChartContainer) detailChartContainer.style.display = 'none';
@@ -1336,18 +1393,18 @@
 
             if (detailChartInstance) detailChartInstance.destroy();
 
-            // ไม่แสดงกราฟถ้าเลือก 'ทั้งหมด'
+            // 2. กรองข้อมูลตามเดือนที่เลือก
             if (selectedMonthYear === 'all') {
                 detailChartContainer.style.display = 'none';
                 return;
             }
 
-            // 2. กรองข้อมูลตามเดือนที่เลือก
             const [yearStr, monthStr] = selectedMonthYear.split('-');
             const selectedMonthInt = parseInt(monthStr);
             const selectedYearInt = parseInt(yearStr);
 
             const filteredResults = globalResults.filter(r => {
+                // สมมติว่าฟังก์ชัน isInBillingPeriod() ถูกต้อง
                 return isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
             });
 
@@ -1356,105 +1413,246 @@
                 return;
             }
 
-            // 3. เตรียมข้อมูลและสูตรคำนวณ
+            // 3. เตรียมข้อมูลและ Dataset (รวมการรองรับ Voltage และ Current)
             const labels = [];
-            const dataCombined = [];
-            // *** เพิ่ม: อาร์เรย์สำหรับเก็บเรท ***
             const dataRates = [];
-
+            let datasets = [];
             let detailChartYAxisLabel = '';
             let detailChartTitle = '';
             let decimalPlacesForDetailChart = 5;
-            let calculationFunction;
+            let calculationFunction = null;
+            let chartScales = {};
 
             const isWhData = selectedDataType.includes('wh');
 
-            // 4. กำหนดสูตรการคำนวณและ Y-Axis Label
-            if (selectedUnit === 'kw_kvar') {
-                decimalPlacesForDetailChart = 3;
-                calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier * 4) / 1000, decimalPlacesForDetailChart);
+            // **************************************************
+            // START: การจัดการข้อมูลและ Dataset ตาม Unit Type
+            // **************************************************
+            if (selectedUnit === 'voltage_abc') {
+                // 3.1 สำหรับ Voltage A, B, C
+                decimalPlacesForDetailChart = 2;
+                detailChartYAxisLabel = 'Voltage (V)';
+                detailChartTitle = `ข้อมูลราย 15 นาที (Voltage A, B, C) สำหรับ ${document.getElementById('monthYearSelector').options[document.getElementById('monthYearSelector').selectedIndex].text}`;
 
-                detailChartYAxisLabel = isWhData
-                    ? (selectedDataType === 'wh_import' ? 'kW (Import)' : 'kW (Export)')
-                    : (selectedDataType === 'varh_import' ? 'kVAR (Import)' : 'kVAR (Export)');
+                // วนลูปเพื่อเก็บ Labels
+                filteredResults.forEach(r => {
+                    labels.push(r.datetime.substring(5, 16));
+                });
 
-            } else { // kwh_kvarh
-                decimalPlacesForDetailChart = 5;
-                calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier) / 1000, decimalPlacesForDetailChart);
+                // สร้าง Datasets สำหรับ Voltage A, B, C
+                datasets.push({
+                    label: 'Voltage A (V)',
+                    data: filteredResults.map(r => r.voltage_a),
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Voltage B (V)',
+                    data: filteredResults.map(r => r.voltage_b),
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Voltage C (V)',
+                    data: filteredResults.map(r => r.voltage_c),
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
 
-                detailChartYAxisLabel = isWhData
-                    ? (selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)')
-                    : (selectedDataType === 'varh_import' ? 'kVARh (Import)' : 'kVARh (Export)');
+                // กำหนด Scales สำหรับ Voltage (เริ่มต้นที่ 0)
+                chartScales = {
+                    x: {
+                        title: { display: true, text: 'วันเวลา' },
+                        ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: detailChartYAxisLabel },
+                        min: 0,
+                        max: 260,
+                        ticks: {
+                            callback: function (value) {
+                                return value.toFixed(decimalPlacesForDetailChart);
+                            }
+                        }
+                    }
+                };
+
+
+            } else if (selectedUnit === 'current_abc') { // ✅ เพิ่ม: สำหรับ Current A, B, C
+
+                // 3.2 สำหรับ Current A, B, C
+                decimalPlacesForDetailChart = 2;
+                detailChartYAxisLabel = 'Current (A)';
+                detailChartTitle = `ข้อมูลราย 15 นาที (Current A, B, C) สำหรับ ${document.getElementById('monthYearSelector').options[document.getElementById('monthYearSelector').selectedIndex].text}`;
+
+                // วนลูปเพื่อเก็บ Labels
+                filteredResults.forEach(r => {
+                    labels.push(r.datetime.substring(5, 16));
+                });
+
+                // สร้าง Datasets สำหรับ Current A, B, C
+                datasets.push({
+                    label: 'Current A (A)',
+                    data: filteredResults.map(r => r.current_a),
+                    // ✅ ใช้สีเดียวกับ Voltage A (Reddish)
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Current B (A)',
+                    data: filteredResults.map(r => r.current_b),
+                    // ✅ ใช้สีเดียวกับ Voltage B (Blue)
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+                datasets.push({
+                    label: 'Current C (A)',
+                    data: filteredResults.map(r => r.current_c),
+                    // ✅ ใช้สีเดียวกับ Voltage C (Teal/Cyan)
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    yAxisID: 'y'
+                });
+
+                // กำหนด Scales สำหรับ Current (เริ่มต้นที่ 0)
+                chartScales = {
+                    x: {
+                        title: { display: true, text: 'วันเวลา' },
+                        ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: detailChartYAxisLabel },
+                        min: 0,
+                        ticks: {
+                            callback: function (value) {
+                                return value.toFixed(decimalPlacesForDetailChart);
+                            }
+                        }
+                    }
+                };
+
+            } else {
+                // 3.3 สำหรับ kW/kVar หรือ kWh/kVarh (โค้ดเดิม)
+
+                if (selectedUnit === 'kw_kvar') {
+                    decimalPlacesForDetailChart = 3;
+                    calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier * 4) / 1000, decimalPlacesForDetailChart);
+                    detailChartYAxisLabel = isWhData
+                        ? (selectedDataType === 'wh_import' ? 'kW (Import/Export)' : 'kW (Import/Export)')
+                        : (selectedDataType === 'varh_import' ? 'kVAR (Import/Export)' : 'kVAR (Import/Export)');
+
+                } else { // kwh_kvarh
+                    decimalPlacesForDetailChart = 5;
+                    calculationFunction = (raw_val, currentMultiplier) => customRound((raw_val * currentMultiplier) / 1000, decimalPlacesForDetailChart);
+                    detailChartYAxisLabel = isWhData
+                        ? (selectedDataType === 'wh_import' ? 'kWh (Import/Export)' : 'kWh (Import/Export)')
+                        : (selectedDataType === 'varh_import' ? 'kVARh (Import/Export)' : 'kVARh (Import/Export)');
+                }
+
+                detailChartTitle = `ข้อมูลราย 15 นาที (${detailChartYAxisLabel}) สำหรับ ${document.getElementById('monthYearSelector').options[document.getElementById('monthYearSelector').selectedIndex].text}`;
+
+                const dataSingle = [];
+                filteredResults.forEach(r => {
+                    const rawValue = isWhData
+                        ? (selectedDataType === 'wh_import' ? r.originalWhImportValue : r.originalWhExportValue)
+                        : r.originalVarhValue || 0;
+
+                    const currentMultiplier = applyMultiplier ? r.rowMultiplier : 1;
+                    labels.push(r.datetime.substring(5, 16));
+
+                    let value = calculationFunction(rawValue, currentMultiplier);
+
+                    // ** เก็บข้อมูล Rate **
+                    const rate = getRate(r.dateObject); // สมมติว่าฟังก์ชันนี้มีอยู่
+                    dataRates.push(rate);
+                    dataSingle.push(value);
+                });
+
+                // สร้าง Dataset เดียวสำหรับ kW/kWh
+                datasets.push({
+                    label: detailChartYAxisLabel,
+                    data: dataSingle,
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                    pointRadius: 0,
+                    pointHitRadius: 0,
+                    borderWidth: 1.5,
+                    tension: 0.2,
+                    spanGaps: true
+                });
+
+                // กำหนด Scales สำหรับ kW/kWh
+                chartScales = {
+                    x: {
+                        title: { display: true, text: 'วันเวลา' },
+                        ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: detailChartYAxisLabel },
+                        ticks: {
+                            callback: function (value) {
+                                return value.toFixed(decimalPlacesForDetailChart);
+                            }
+                        }
+                    }
+                };
             }
+            // **************************************************
+            // END: การจัดการข้อมูลและ Dataset ตาม Unit Type
+            // **************************************************
 
-            detailChartTitle = `ข้อมูลราย 15 นาที (${detailChartYAxisLabel}) สำหรับ ${document.getElementById('monthYearSelector').options[document.getElementById('monthYearSelector').selectedIndex].text}`;
-
-
-            // 5. วนลูปข้อมูลเพื่อคำนวณและเตรียม Dataset
-            filteredResults.forEach(r => {
-                const rawValue = isWhData
-                    ? (selectedDataType === 'wh_import' ? r.originalWhImportValue : r.originalWhExportValue)
-                    : r.originalVarhValue || 0;
-
-                const currentMultiplier = applyMultiplier ? r.rowMultiplier : 1;
-
-                labels.push(r.datetime.substring(5, 16));
-
-                let value = calculationFunction(rawValue, currentMultiplier);
-
-                // ** เพิ่ม: เก็บข้อมูล Rate และค่าบวก **
-                const rate = getRate(r.dateObject); // สมมติว่าฟังก์ชันนี้มีอยู่
-                dataRates.push(rate);
-                dataCombined.push(value);
-            });
-
-            // 6. สร้างกราฟเส้นใหม่
+            // 4. สร้างกราฟเส้นใหม่
             detailChartInstance = new Chart(ctxDetail, {
                 type: 'line',
                 data: {
                     labels: labels,
-                    datasets: [
-                        {
-                            label: detailChartYAxisLabel,
-                            data: dataCombined,
-                            borderColor: 'rgba(54, 162, 235, 1)',
-                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                            pointRadius: 0,
-                            pointHitRadius: 0,
-                            borderWidth: 1.5,
-                            tension: 0.2,
-                            spanGaps: true
-                        }
-                    ]
+                    datasets: datasets
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     plugins: {
                         title: { display: true, text: detailChartTitle, font: { size: 16 } },
-                        legend: { display: false },
+                        // ✅ แก้ไข: แสดง Legend เมื่อเลือก Voltage หรือ Current
+                        legend: { display: selectedUnit === 'voltage_abc' || selectedUnit === 'current_abc' },
                         tooltip: {
                             mode: 'index',
                             intersect: false,
                             callbacks: {
-                                label: function (context) {
-                                    // ดึงดัชนีของจุดข้อมูลปัจจุบัน
-                                    const dataIndex = context.dataIndex;
-                                    // ดึงเรทที่ถูกเก็บไว้ใน dataRates
+                                footer: function (tooltipItems) {
+                                    // ✅ แก้ไข: ไม่แสดง Rate เมื่อเป็น Voltage หรือ Current
+                                    if (selectedUnit === 'voltage_abc' || selectedUnit === 'current_abc') return '';
+                                    const dataIndex = tooltipItems[0].dataIndex;
                                     const rate = dataRates[dataIndex] || 'ไม่ทราบเรท';
-
-                                    // Label สำหรับค่า (เช่น: kWh (Import): 12.345)
+                                    return `เรท: ${rate}`;
+                                },
+                                label: function (context) {
                                     let valueLabel = context.dataset.label || '';
                                     if (context.parsed.y !== null) {
                                         const displayValue = context.parsed.y;
                                         valueLabel = `${valueLabel}: ${displayValue.toLocaleString('en-US', { minimumFractionDigits: decimalPlacesForDetailChart, maximumFractionDigits: decimalPlacesForDetailChart })}`;
                                     }
-
-                                    // ** สร้าง Label สำหรับ Rate **
-                                    const rateLabel = `เรท: ${rate}`;
-
-                                    // คืนค่าอาร์เรย์ของ Label: [เรท, ค่า]
-                                    return [rateLabel, valueLabel];
+                                    return valueLabel;
                                 }
                             }
                         },
@@ -1467,21 +1665,7 @@
                             }
                         }
                     },
-                    scales: {
-                        x: {
-                            title: { display: true, text: 'วันเวลา' },
-                            ticks: { maxRotation: 90, minRotation: 90, autoSkip: true, maxTicksLimit: 30 }
-                        },
-                        y: {
-                            beginAtZero: true,
-                            title: { display: true, text: detailChartYAxisLabel },
-                            ticks: {
-                                callback: function (value) {
-                                    return value.toFixed(decimalPlacesForDetailChart);
-                                }
-                            }
-                        }
-                    }
+                    scales: chartScales // ใช้ Scales ที่กำหนดไว้ด้านบน
                 }
             });
 
