@@ -1263,12 +1263,20 @@
                     const expectedIntervals = numDaysInMonth * 96;
                     let actualIntervals = 0;
 
+                    // นับจำนวนวันที่มีข้อมูลจริง
+                    const daysWithData = new Set();
+
                     globalResults.forEach(r => {
                         if (isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt)) {
                             actualIntervals++;
+                            // เก็บวันที่มีข้อมูล
+                            const bkkComponents = getBKKTimeComponents(r.dateObject);
+                            const dateKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}-${bkkComponents.day.toString().padStart(2, '0')}`;
+                            daysWithData.add(dateKey);
                         }
                     });
 
+                    const actualDays = daysWithData.size;
                     const statusClass = actualIntervals < expectedIntervals ? 'warning' : 'complete';
                     const statusText = actualIntervals < expectedIntervals ? '⚠️' : '✅';
 
@@ -1276,6 +1284,7 @@
                 <li class="${statusClass}">
                     <strong>เดือน ${monthName} ${selectedYearInt + 543}:</strong>
                     <span class="count">${actualIntervals} / ${expectedIntervals}</span>
+                    <span class="count">(${actualDays} / ${numDaysInMonth} วัน)</span>
                     <span class="status">${statusText}</span>
                 </li>
             `;
@@ -1818,8 +1827,89 @@
                 ]);
             });
 
-            const ws = XLSX.utils.aoa_to_sheet(dataToExport);
+            // สร้างชีท TOU Summary
+            const touData = [];
+            const wh_unit = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
+            const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+
+            // Header
+            touData.push([
+                'เดือน/ปี',
+                `${wh_unit} (รวม)`,
+                `${wh_unit} (Peak)`,
+                `${wh_unit} (Off-Peak)`,
+                `${wh_unit} (Holiday)`,
+                'kW Max(Peak)',
+                'kW Max(Off-Peak)',
+                'kW Max(Holiday)',
+                'kVar Max(รวมทุกเรท)',
+                'เวลา kW (peak) สูงสุด',
+                'เวลา kW (Off-Peak) สูงสุด',
+                'เวลา kW (Holiday) สูงสุด'
+            ]);
+
+            // เรียงลำดับเดือนจากเก่าไปใหม่
+            const sortedMonthKeys = Object.keys(monthlySummaries).sort((a, b) => {
+                const [yearA, monthA] = a.split('-').map(Number);
+                const [yearB, monthB] = b.split('-').map(Number);
+                if (yearA !== yearB) return yearA - yearB;
+                return monthA - monthB;
+            });
+
+            const decimalPlacesForKwhSummary = 2;
+            const decimalPlacesForKwSummary = 3;
+
+            sortedMonthKeys.forEach(monthKey => {
+                const [yearStr, monthStr] = monthKey.split('-');
+                const year = parseInt(yearStr);
+                const monthIndex = parseInt(monthStr) - 1;
+
+                const currentMonthSummary = monthlySummaries[monthKey];
+                const currentMonthMax = monthlyMaxValues[monthKey];
+
+                const displayTotalWhMonth = customRound(((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) / 1000), decimalPlacesForKwhSummary);
+
+                const displayPeakWh = customRound((currentMonthSummary['Peak'].wh / 1000), decimalPlacesForKwhSummary);
+                const displayOffPeakWh = customRound((currentMonthSummary['Off-peak'].wh / 1000), decimalPlacesForKwhSummary);
+                const displayHolidayWh = customRound((currentMonthSummary['Holiday'].wh / 1000), decimalPlacesForKwhSummary);
+
+                const displayPeakKw = customRound(currentMonthMax['Peak'].wh, decimalPlacesForKwSummary);
+                const displayOffPeakKw = customRound(currentMonthMax['Off-peak'].wh, decimalPlacesForKwSummary);
+                const displayHolidayKw = customRound(currentMonthMax['Holiday'].wh, decimalPlacesForKwSummary);
+
+                let baseMaxKvarMonthOverall = 0;
+                ['Peak', 'Off-peak', 'Holiday'].forEach(rate => {
+                    if (currentMonthMax[rate].varh > baseMaxKvarMonthOverall) {
+                        baseMaxKvarMonthOverall = currentMonthMax[rate].varh;
+                    }
+                });
+                const displayMaxKvarMonthOverall = customRound(baseMaxKvarMonthOverall, decimalPlacesForKwSummary);
+
+                touData.push([
+                    `${monthNames[monthIndex]} ${year + 543}`,
+                    displayTotalWhMonth.toFixed(decimalPlacesForKwhSummary),
+                    displayPeakWh.toFixed(decimalPlacesForKwhSummary),
+                    displayOffPeakWh.toFixed(decimalPlacesForKwhSummary),
+                    displayHolidayWh.toFixed(decimalPlacesForKwhSummary),
+                    displayPeakKw.toFixed(decimalPlacesForKwSummary),
+                    displayOffPeakKw.toFixed(decimalPlacesForKwSummary),
+                    displayHolidayKw.toFixed(decimalPlacesForKwSummary),
+                    displayMaxKvarMonthOverall.toFixed(decimalPlacesForKwSummary),
+                    currentMonthMax['Peak'].wh_datetime || 'N/A',
+                    currentMonthMax['Off-peak'].wh_datetime || 'N/A',
+                    currentMonthMax['Holiday'].wh_datetime || 'N/A'
+                ]);
+            });
+
+            // สร้าง Workbook
             const wb = XLSX.utils.book_new();
+
+            // เพิ่มชีท TOU
+            const wsTOU = XLSX.utils.aoa_to_sheet(touData);
+            XLSX.utils.book_append_sheet(wb, wsTOU, "TOU");
+
+            // เพิ่มชีทข้อมูลรายละเอียด
+            const ws = XLSX.utils.aoa_to_sheet(dataToExport);
             XLSX.utils.book_append_sheet(wb, ws, "Electric Rates Filtered");
 
             const now = new Date();
