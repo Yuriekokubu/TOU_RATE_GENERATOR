@@ -1716,14 +1716,13 @@
                 whCalculation = (wh_val_raw, mult) => {
                     return customRound((parseFloat(wh_val_raw) * mult), decimalPlaces);
                 };
-
                 varhCalculation = (varh_val_raw, mult) => {
                     return customRound((parseFloat(varh_val_raw) * mult), decimalPlaces);
                 };
             }
 
+            // ========== Data for Electric Rates Sheet ==========
             const dataToExport = [];
-
             dataToExport.push(['วันเวลา', 'เรท', whUnit, varhUnit, 'ตัวคูณ']);
 
             let dataForExport = [];
@@ -1737,11 +1736,12 @@
                 const selectedMonthInt = parseInt(monthStr);
                 const selectedYearInt = parseInt(yearStr);
 
-                dataForExport = globalResults.filter(r => {
-                    return isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
-                });
+                dataForExport = globalResults.filter(r =>
+                    isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt)
+                );
             }
 
+            // Sorting
             if (sortState.columnIndex !== null) {
                 const directionModifier = sortState.direction === 'asc' ? 1 : -1;
                 const selectedUnitForSort = document.getElementById('unitSelector').value;
@@ -1749,19 +1749,27 @@
 
                 let whUnitConverterForSort, varhUnitConverterForSort;
                 if (selectedUnitForSort === 'kw_kvar') {
-                    whUnitConverterForSort = (wh_val, mult) => (Math.round(parseFloat(wh_val) * 4) / 1000) * mult;
-                    varhUnitConverterForSort = (varh_val, mult) => (Math.round(parseFloat(varh_val) * 4) / 1000) * mult;
+                    whUnitConverterForSort = (wh_val, mult) =>
+                        (Math.round(parseFloat(wh_val) * 4) / 1000) * mult;
+                    varhUnitConverterForSort = (varh_val, mult) =>
+                        (Math.round(parseFloat(varh_val) * 4) / 1000) * mult;
                 } else {
-                    whUnitConverterForSort = (wh_val, mult) => (parseFloat(wh_val) * mult);
-                    varhUnitConverterForSort = (varh_val, mult) => (parseFloat(varh_val) * mult);
+                    whUnitConverterForSort = (wh_val, mult) => parseFloat(wh_val) * mult;
+                    varhUnitConverterForSort = (varh_val, mult) => parseFloat(varh_val) * mult;
                 }
 
                 dataForExport.sort((a, b) => {
                     let valA, valB;
                     const multA = applyMultiplierForSort ? a.rowMultiplier : 1;
                     const multB = applyMultiplierForSort ? b.rowMultiplier : 1;
-                    let wh_val_A = selectedDataType === 'wh_import' ? a.originalWhImportValue : a.originalWhExportValue;
-                    let wh_val_B = selectedDataType === 'wh_import' ? b.originalWhImportValue : b.originalWhExportValue;
+                    let wh_val_A =
+                        selectedDataType === 'wh_import'
+                            ? a.originalWhImportValue
+                            : a.originalWhExportValue;
+                    let wh_val_B =
+                        selectedDataType === 'wh_import'
+                            ? b.originalWhImportValue
+                            : b.originalWhExportValue;
 
                     switch (sortState.columnIndex) {
                         case 0:
@@ -1771,11 +1779,7 @@
                         case 1:
                             valA = getRate(a.dateObject);
                             valB = getRate(b.dateObject);
-                            const rateOrder = {
-                                'Holiday': 1,
-                                'Off-peak': 2,
-                                'Peak': 3
-                            };
+                            const rateOrder = { Holiday: 1, 'Off-peak': 2, Peak: 3 };
                             return (rateOrder[valA] - rateOrder[valB]) * directionModifier;
                         case 2:
                             valA = whUnitConverterForSort(wh_val_A, multA);
@@ -1785,7 +1789,7 @@
                             valA = varhUnitConverterForSort(a.originalVarhValue, multA);
                             valB = varhUnitConverterForSort(b.originalVarhValue, multB);
                             break;
-                        case 4: // Multiplier
+                        case 4:
                             valA = a.rowMultiplier;
                             valB = b.rowMultiplier;
                             break;
@@ -1801,21 +1805,19 @@
                 });
             }
 
+            // Export rows
             dataForExport.forEach(r => {
-                if (!r || !r.dateObject) {
-                    console.error("Skipping malformed data row during export:", r);
-                    return;
-                }
+                if (!r || !r.dateObject) return;
 
-                const wh = selectedDataType === 'wh_import' ? r.originalWhImportValue : r.originalWhExportValue;
+                const wh =
+                    selectedDataType === 'wh_import'
+                        ? r.originalWhImportValue
+                        : r.originalWhExportValue;
                 const varh = r.originalVarhValue || 0;
+                const mult = applyMultiplier ? r.rowMultiplier : 1;
 
-                // ใช้ค่า rowMultiplier จากอ็อบเจกต์ของแถวนั้นๆ
-                const currentMultiplierForDisplayOrExport = applyMultiplier ? r.rowMultiplier : 1;
-
-                const currentWh = whCalculation(wh, currentMultiplierForDisplayOrExport);
-                const currentVarh = varhCalculation(varh, currentMultiplierForDisplayOrExport);
-
+                const currentWh = whCalculation(wh, mult);
+                const currentVarh = varhCalculation(varh, mult);
                 const rate = getRate(r.dateObject);
 
                 dataToExport.push([
@@ -1823,108 +1825,163 @@
                     rate,
                     currentWh.toFixed(decimalPlaces),
                     currentVarh.toFixed(decimalPlaces),
-                    applyMultiplier ? r.rowMultiplier.toFixed(4) : 1
+                    mult
                 ]);
             });
 
-            // สร้างชีท TOU Summary
+            // --------------------------------------
+            //      TOU SUMMARY (เพิ่ม Max ครบ)
+            // --------------------------------------
             const touData = [];
-            const wh_unit = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
-            const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
+            const wh_unit =
+                selectedDataType === 'wh_import'
+                    ? 'kWh (Import)'
+                    : 'kWh (Export)';
+
+            const monthNames = [
+                "ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.",
+                "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."
+            ];
 
             // Header
             touData.push([
-                'เดือน/ปี',
+                "เดือน/ปี",
+                "จำนวน Interval",
+                "จำนวนวัน",
                 `${wh_unit} (รวม)`,
                 `${wh_unit} (Peak)`,
                 `${wh_unit} (Off-Peak)`,
                 `${wh_unit} (Holiday)`,
-                'kW Max(Peak)',
-                'kW Max(Off-Peak)',
-                'kW Max(Holiday)',
-                'kVar Max(รวมทุกเรท)',
-                'เวลา kW (peak) สูงสุด',
-                'เวลา kW (Off-Peak) สูงสุด',
-                'เวลา kW (Holiday) สูงสุด'
+                "kW Max (Peak)",
+                "kW Max (Off-Peak)",
+                "kW Max (Holiday)",
+                "kVar Max (รวม)",
+                "เวลา kW Peak สูงสุด",
+                "เวลา kW Off-Peak สูงสุด",
+                "เวลา kW Holiday สูงสุด"
             ]);
 
-            // เรียงลำดับเดือนจากเก่าไปใหม่
             const sortedMonthKeys = Object.keys(monthlySummaries).sort((a, b) => {
-                const [yearA, monthA] = a.split('-').map(Number);
-                const [yearB, monthB] = b.split('-').map(Number);
-                if (yearA !== yearB) return yearA - yearB;
-                return monthA - monthB;
+                const [yA, mA] = a.split("-").map(Number);
+                const [yB, mB] = b.split("-").map(Number);
+                if (yA !== yB) return yA - yB;
+                return mA - mB;
             });
 
-            const decimalPlacesForKwhSummary = 2;
-            const decimalPlacesForKwSummary = 3;
-
             sortedMonthKeys.forEach(monthKey => {
-                const [yearStr, monthStr] = monthKey.split('-');
+                const [yearStr, monthStr] = monthKey.split("-");
                 const year = parseInt(yearStr);
                 const monthIndex = parseInt(monthStr) - 1;
 
-                const currentMonthSummary = monthlySummaries[monthKey];
-                const currentMonthMax = monthlyMaxValues[monthKey];
+                const monthSummary = monthlySummaries[monthKey];
 
-                const displayTotalWhMonth = customRound(((currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh) / 1000), decimalPlacesForKwhSummary);
+                //---------------------------------------
+                //       Interval Summary
+                //---------------------------------------
+                const numDays = getDaysInMonth(year, monthIndex + 1);
+                const expected = numDays * 96;
+                let actual = 0;
+                const daysWithData = new Set();
 
-                const displayPeakWh = customRound((currentMonthSummary['Peak'].wh / 1000), decimalPlacesForKwhSummary);
-                const displayOffPeakWh = customRound((currentMonthSummary['Off-peak'].wh / 1000), decimalPlacesForKwhSummary);
-                const displayHolidayWh = customRound((currentMonthSummary['Holiday'].wh / 1000), decimalPlacesForKwhSummary);
+                //---------------------------------------
+                //       MAX SUMMARY
+                //---------------------------------------
+                let maxPeak = 0, maxOffPeak = 0, maxHoliday = 0;
+                let maxVar = 0;
 
-                const displayPeakKw = customRound(currentMonthMax['Peak'].wh, decimalPlacesForKwSummary);
-                const displayOffPeakKw = customRound(currentMonthMax['Off-peak'].wh, decimalPlacesForKwSummary);
-                const displayHolidayKw = customRound(currentMonthMax['Holiday'].wh, decimalPlacesForKwSummary);
+                let maxPeakTime = "N/A";
+                let maxOffTime = "N/A";
+                let maxHolTime = "N/A";
 
-                let baseMaxKvarMonthOverall = 0;
-                ['Peak', 'Off-peak', 'Holiday'].forEach(rate => {
-                    if (currentMonthMax[rate].varh > baseMaxKvarMonthOverall) {
-                        baseMaxKvarMonthOverall = currentMonthMax[rate].varh;
+                //---------------------------------------
+                // Scan through globalResults
+                //---------------------------------------
+                globalResults.forEach(r => {
+                    const { year: y, month: m, day } = getBKKTimeComponents(r.dateObject);
+
+                    if (y === year && (m + 1) === monthIndex + 1) {
+                        actual++;
+                        daysWithData.add(day);
+
+                        const wh = r.originalWhImportValue ?? r.originalWhExportValue ?? 0;
+                        const varh = r.originalVarhValue ?? 0;
+
+                        // kVA = (Wh * 4) / 1000 assuming 15-min interval
+                        const kW = (wh * 4) / 1000;
+                        const kVar = (varh * 4) / 1000;
+
+                        const rate = getRate(r.dateObject);
+
+                        if (kVar > maxVar) maxVar = kVar;
+
+                        if (rate === "Peak" && kW > maxPeak) {
+                            maxPeak = kW;
+                            maxPeakTime = r.datetime;
+                        }
+                        if (rate === "Off-peak" && kW > maxOffPeak) {
+                            maxOffPeak = kW;
+                            maxOffTime = r.datetime;
+                        }
+                        if (rate === "Holiday" && kW > maxHoliday) {
+                            maxHoliday = kW;
+                            maxHolTime = r.datetime;
+                        }
                     }
                 });
-                const displayMaxKvarMonthOverall = customRound(baseMaxKvarMonthOverall, decimalPlacesForKwSummary);
 
+                const intervalText = `${actual} / ${expected}`;
+                const dayText = `${daysWithData.size} / ${numDays} วัน`;
+
+                //---------------------------------------
+                //         KWH SUMMARY
+                //---------------------------------------
+                const totalWh = (
+                    (monthSummary["Peak"].wh +
+                        monthSummary["Off-peak"].wh +
+                        monthSummary["Holiday"].wh) /
+                    1000
+                ).toFixed(2);
+
+                const peakWh = (monthSummary["Peak"].wh / 1000).toFixed(2);
+                const offWh = (monthSummary["Off-peak"].wh / 1000).toFixed(2);
+                const holWh = (monthSummary["Holiday"].wh / 1000).toFixed(2);
+
+                //---------------------------------------
+                // Push row
+                //---------------------------------------
                 touData.push([
                     `${monthNames[monthIndex]} ${year + 543}`,
-                    displayTotalWhMonth.toFixed(decimalPlacesForKwhSummary),
-                    displayPeakWh.toFixed(decimalPlacesForKwhSummary),
-                    displayOffPeakWh.toFixed(decimalPlacesForKwhSummary),
-                    displayHolidayWh.toFixed(decimalPlacesForKwhSummary),
-                    displayPeakKw.toFixed(decimalPlacesForKwSummary),
-                    displayOffPeakKw.toFixed(decimalPlacesForKwSummary),
-                    displayHolidayKw.toFixed(decimalPlacesForKwSummary),
-                    displayMaxKvarMonthOverall.toFixed(decimalPlacesForKwSummary),
-                    currentMonthMax['Peak'].wh_datetime || 'N/A',
-                    currentMonthMax['Off-peak'].wh_datetime || 'N/A',
-                    currentMonthMax['Holiday'].wh_datetime || 'N/A'
+                    intervalText,
+                    dayText,
+                    totalWh,
+                    peakWh,
+                    offWh,
+                    holWh,
+                    maxPeak.toFixed(3),
+                    maxOffPeak.toFixed(3),
+                    maxHoliday.toFixed(3),
+                    maxVar.toFixed(3),
+                    maxPeakTime,
+                    maxOffTime,
+                    maxHolTime
                 ]);
             });
 
-            // สร้าง Workbook
+            // workbook
             const wb = XLSX.utils.book_new();
-
-            // เพิ่มชีท TOU
             const wsTOU = XLSX.utils.aoa_to_sheet(touData);
             XLSX.utils.book_append_sheet(wb, wsTOU, "TOU");
 
-            // เพิ่มชีทข้อมูลรายละเอียด
             const ws = XLSX.utils.aoa_to_sheet(dataToExport);
             XLSX.utils.book_append_sheet(wb, ws, "Electric Rates Filtered");
 
             const now = new Date();
-            const day = String(now.getDate()).padStart(2, '0');
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const year = now.getFullYear();
-            const hours = String(now.getHours()).padStart(2, '0');
-            const minutes = String(now.getMinutes()).padStart(2, '0');
-            const seconds = String(now.getSeconds()).padStart(2, '0');
-
-            const formattedDateTime = `${day}/${month}/${year}_${hours}${minutes}${seconds}`;
-            const filename = `${meterNumber || 'N_A'}_${formattedDateTime}.xlsx`;
+            const filename = `${meterNumber || "N_A"}_${now.getDate()}-${now.getMonth() +
+                1}-${now.getFullYear()}_${now.getHours()}${now.getMinutes()}${now.getSeconds()}.xlsx`;
 
             XLSX.writeFile(wb, filename);
         }
+
 
         document.getElementById('exportExcel').addEventListener('click', exportTableToExcel);
 
