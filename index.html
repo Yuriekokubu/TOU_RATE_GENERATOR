@@ -1162,6 +1162,7 @@
 
 
         function updateDisplay() {
+            // ต้องมั่นใจว่า isProcessed ถูกตั้งค่าเป็น true หลังจากประมวลผลไฟล์แล้ว
             if (!isProcessed) {
                 return;
             }
@@ -1177,6 +1178,7 @@
             const outputDiv = document.getElementById('output');
             outputDiv.innerHTML = ''; // ล้างเนื้อหาเก่าใน outputDiv
 
+            // ต้องมั่นใจว่า calculateAllMonthsSummariesAndMaxes เป็นฟังก์ชันที่ทำงานได้
             const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
                 calculateAllMonthsSummariesAndMaxes(selectedArType, selectedDataType);
 
@@ -1184,7 +1186,7 @@
             monthlySummaries = calculatedMonthlySummaries;
             monthlyMaxValues = calculatedMonthlyMaxValues;
 
-            // ตารางสรุปรายเดือน
+            // ตารางสรุปรายเดือน (ต้องมั่นใจว่า renderMonthlySummaryTable เป็นฟังก์ชันที่ทำงานได้)
             outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues, selectedDataType);
 
             const summaryBoxWrapper = document.createElement('div');
@@ -1205,10 +1207,11 @@
                             end: datetime
                         };
                     } else {
-                        if (new Date(datetime) < new Date(multiplierRanges[multiplier].start)) {
+                        const currentDt = new Date(datetime);
+                        if (currentDt < new Date(multiplierRanges[multiplier].start)) {
                             multiplierRanges[multiplier].start = datetime;
                         }
-                        if (new Date(datetime) > new Date(multiplierRanges[multiplier].end)) {
+                        if (currentDt > new Date(multiplierRanges[multiplier].end)) {
                             multiplierRanges[multiplier].end = datetime;
                         }
                     }
@@ -1230,6 +1233,7 @@
                 }
             }
 
+            // ต้องมั่นใจว่า meterNumber เป็น Global Variable
             const meterInfoHtml = `
         <div class="summary-box meter-info">
             <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
@@ -1239,13 +1243,11 @@
             summaryBoxWrapper.innerHTML += meterInfoHtml;
 
             // -----------------------------------------------------
-            // ส่วนที่ 2: Interval Check (พร้อมกำหนดค่า Global Variable)
+            // ส่วนที่ 2: Interval Check (พร้อมการแก้ไข 31/30 และการแสดงสถานะ)
             // -----------------------------------------------------
 
-            // START: MODIFIED CODE FOR INTERVAL CHECK
             const billingPeriodInfoDiv = document.createElement('div');
             billingPeriodInfoDiv.className = 'summary-box billing-period-info';
-
             billingPeriodInfoDiv.innerHTML = '<h3>ข้อมูล Interval</h3>';
 
             const uniqueMonthYears = new Set();
@@ -1257,51 +1259,96 @@
             const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
             const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-            // ** NEW: สร้างตัวแปรชั่วคราวเพื่อเก็บข้อมูล Interval สำหรับ Export **
             const newMonthlyIntervalDataForExport = {};
-            // *************************************************************
 
             if (sortedUniqueMonthYears.length > 0) {
                 let intervalListHtml = '<ul class="interval-list">';
 
                 sortedUniqueMonthYears.forEach(monthKey => {
                     const [yearStr, monthStr] = monthKey.split('-');
-                    const selectedMonthInt = parseInt(monthStr);
+                    const selectedMonthInt = parseInt(monthStr); // 1-12
                     const selectedYearInt = parseInt(yearStr);
                     const monthName = monthNames[selectedMonthInt - 1];
 
+                    // --- BILLING PERIOD CALCULATION ---
                     const numDaysInMonth = getDaysInMonth(selectedYearInt, selectedMonthInt);
-                    const expectedIntervals = numDaysInMonth * 96;
-                    let actualIntervals = 0;
 
-                    // นับจำนวนวันที่มีข้อมูลจริง
+                    const { startDate, endDate } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
+
+                    let expectedIntervalsInBillingPeriod = 0;
+                    let expectedDaysInBillingPeriod = 0;
+                    let billingPeriodLabel = `${numDaysInMonth} วันในเดือนปฏิทิน`;
+
+                    if (startDate && endDate) {
+                        const totalIntervalsMs = endDate.getTime() - startDate.getTime();
+                        expectedIntervalsInBillingPeriod = Math.round(totalIntervalsMs / 900000);
+                        expectedDaysInBillingPeriod = Math.round(totalIntervalsMs / 86400000);
+
+                        const startBkk = getBKKTimeComponents(startDate);
+                        const endBkk = getBKKTimeComponents(endDate);
+
+                        billingPeriodLabel = `${expectedDaysInBillingPeriod} วันในรอบบิล (อ่านจาก ${startBkk.day}/${startBkk.month + 1}/${startBkk.year + 543} ถึง ${endBkk.day}/${endBkk.month + 1}/${endBkk.year + 543})`;
+                    } else {
+                        expectedDaysInBillingPeriod = numDaysInMonth;
+                        expectedIntervalsInBillingPeriod = numDaysInMonth * 96;
+                    }
+                    // --- END BILLING PERIOD CALCULATION ---
+
+                    // ** นับ Actual Interval และ Day Count **
+                    let actualIntervals = 0;
                     const daysWithData = new Set();
 
                     globalResults.forEach(r => {
-                        if (isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt)) {
+                        if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
                             actualIntervals++;
-                            // เก็บวันที่มีข้อมูล
+
                             const bkkComponents = getBKKTimeComponents(r.dateObject);
                             const dateKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}-${bkkComponents.day.toString().padStart(2, '0')}`;
                             daysWithData.add(dateKey);
                         }
                     });
 
-                    const actualDays = daysWithData.size;
-                    const statusClass = actualIntervals < expectedIntervals ? 'warning' : 'complete';
-                    const statusText = actualIntervals < expectedIntervals ? '⚠️' : '✅';
+                    const actualDayCount = daysWithData.size; // จำนวนวันที่มีข้อมูลจริง
+
+                    // ** จำกัดการแสดงผลของ Day Count เพื่อไม่ให้ตัวเศษเกินตัวส่วน **
+                    const displayedDayCount = Math.min(actualDayCount, expectedDaysInBillingPeriod);
+
+                    // ** Display logic update **
+                    const intervalRatio = (expectedIntervalsInBillingPeriod > 0) ? actualIntervals / expectedIntervalsInBillingPeriod : 0;
+                    const intervalRatioPercent = customRound(intervalRatio * 100, 2);
+
+                    let dayCountWarning = '';
+                    
+
+                    // 2. กำหนดสถานะและข้อความเตือนหลัก (รวมการแก้ไขตามคำขอของผู้ใช้: ไม่แสดง ✅ เมื่อ Day Count เกิน)
+                    let statusClass = 'complete';
+                    let statusText = '✅';
+
+                    if (actualIntervals < expectedIntervalsInBillingPeriod) {
+                        // กรณีที่ 1: Interval ขาด (มี ⚠️)
+                        statusClass = 'warning';
+                        statusText = '⚠️';
+                    } else if (actualDayCount > expectedDaysInBillingPeriod) {
+                        // กรณีที่ 2: Interval ครบ แต่ Day Count เกิน
+                        // ลบ ✅ ตามคำขอของผู้ใช้ โดยกำหนด statusText เป็นสตริงว่าง
+                        statusClass = 'anomaly';
+                        statusText = '';
+                    }
 
                     // ** กำหนดค่าให้กับ Object ชั่วคราว **
                     newMonthlyIntervalDataForExport[monthKey] = {
-                        interval: `${actualIntervals} / ${expectedIntervals}`,
-                        dayCount: `${actualDays} / ${numDaysInMonth} วัน`
+                        interval: `${actualIntervals}/${expectedIntervalsInBillingPeriod}`,
+                        dayCount: `${displayedDayCount}/${expectedDaysInBillingPeriod}`,
+                        dayDifference: actualDayCount - expectedDaysInBillingPeriod,
+                        intervalRatioPercent: intervalRatioPercent.toFixed(2),
+                        expectedDays: expectedDaysInBillingPeriod
                     };
 
                     intervalListHtml += `
                 <li class="${statusClass}">
                     <strong>เดือน ${monthName} ${selectedYearInt + 543}:</strong>
-                    <span class="count">${actualIntervals} / ${expectedIntervals}</span>
-                    <span class="count">(${actualDays} / ${numDaysInMonth} วัน)</span>
+                    <span class="count">${actualIntervals} / ${expectedIntervalsInBillingPeriod} Interval</span>
+                    <span class="count">(${displayedDayCount} / ${expectedDaysInBillingPeriod} วัน)${dayCountWarning}</span>
                     <span class="status">${statusText}</span>
                 </li>
             `;
@@ -1310,21 +1357,16 @@
                 intervalListHtml += '</ul>';
                 billingPeriodInfoDiv.innerHTML += intervalListHtml;
 
-                // ** ส่วนสำคัญ: กำหนดค่าให้กับ Global Variable เพื่อให้ exportTableToExcel ใช้งานได้ **
                 monthlyIntervalDataForExport = newMonthlyIntervalDataForExport;
-                // *************************************************
-
             } else {
                 billingPeriodInfoDiv.innerHTML += `<p>ไม่พบข้อมูล Interval ในไฟล์</p>`;
-                // หากไม่พบข้อมูล ให้กำหนด Global Variable เป็น Object ว่าง
                 monthlyIntervalDataForExport = {};
             }
             summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
-            // END: MODIFIED CODE FOR INTERVAL CHECK
 
 
             // -----------------------------------------------------
-            // ส่วนที่ 3: Consumption Summary
+            // ส่วนที่ 3: Consumption Summary (ไม่มีการเปลี่ยนแปลง)
             // -----------------------------------------------------
             const consumptionSummaryDiv = document.createElement('div');
             consumptionSummaryDiv.className = 'summary-box consumption-summary';
@@ -1394,7 +1436,7 @@
 
             updateExportButtonVisibility();
 
-            // วาดกราฟ (ใช้ Canvas ที่มีอยู่ใน HTML หลัก)
+            // วาดกราฟ 
             updateCharts();
         }
 
