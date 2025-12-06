@@ -1300,22 +1300,21 @@
 
                     // ** นับ Actual Interval (Actual Row Count) และ Day Count **
                     let actualIntervals = 0; // นี่คือตัวแปรสำหรับ Actual Row Count
-                    const daysWithData = new Set();
+                    // ✅ แก้ไข: ไม่ต้องใช้ daysWithData.add(dateKey); อีกต่อไป
+                    // const daysWithData = new Set(); 
 
                     globalResults.forEach(r => {
                         // *** การแก้ไขที่สำคัญ: เปลี่ยน < เป็น <= เพื่อรวมแถวสุดท้าย ***
                         if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
                             actualIntervals++; // 👈 การนับจำนวนแถวข้อมูลจริง
-
-                            const bkkComponents = getBKKTimeComponents(r.dateObject);
-                            const dateKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}-${bkkComponents.day.toString().padStart(2, '0')}`;
-                            daysWithData.add(dateKey);
                         }
                     });
 
-                    const actualDayCount = daysWithData.size; // จำนวนวันที่มีข้อมูลจริง
+                    // ✅ แก้ไข: คำนวณ Actual Day Count จาก Actual Intervals
+                    const actualDayCount = Math.floor(actualIntervals / 96); // 👈 การแก้ไขหลัก: หาร Interval ด้วย 96 แล้วปัดเศษลง
 
                     // ** จำกัดการแสดงผลของ Day Count เพื่อไม่ให้ตัวเศษเกินตัวส่วน **
+                    // ใช้ actualDayCount ที่คำนวณใหม่
                     const displayedDayCount = Math.min(actualDayCount, expectedDaysInBillingPeriod);
 
                     // ** Display logic update **
@@ -1336,13 +1335,12 @@
                         // กรณีที่ 1: Interval ขาด
                         statusClass = 'warning';
                         statusText = '⚠️';
-                    } else if (actualDayCount > expectedDaysInBillingPeriod) {
-                        // กรณีที่ 2: Day Count เกิน
-                        statusClass = 'anomaly';
-                        statusText = '';
-                        dayCountWarning = ' <span class="anomaly-text">(วันเกิน)</span>';
-                    } else if (intervalRatio > 1) {
-                        // กรณีที่ 3: Interval เกิน (ไม่ควรเกิดหลังแก้ไขแล้ว)
+                    }
+                    // ✅ ลบกรณีที่ 2: Day Count เกิน ออก เนื่องจากได้แก้ไขการคำนวณแล้ว
+
+                    // ✅ เพิ่ม: กรณี Interval เกิน (ถ้า Actual Intervals มากกว่า Expected Intervals)
+                    else if (intervalRatio > 1) {
+                        // กรณีที่ 3: Interval เกิน 
                         statusClass = 'anomaly';
                         statusText = '🚨';
                     }
@@ -1350,7 +1348,8 @@
                     // ** กำหนดค่าให้กับ Object ชั่วคราว **
                     newMonthlyIntervalDataForExport[monthKey] = {
                         interval: `${actualIntervals}/${expectedIntervalsInBillingPeriod}`,
-                        dayCount: `${displayedDayCount}/${expectedDaysInBillingPeriod}`,
+                        // ✅ แก้ไข: ใช้ actualDayCount ที่คำนวณใหม่ในการส่งออก
+                        dayCount: `${actualDayCount}/${expectedDaysInBillingPeriod}`,
                         dayDifference: actualDayCount - expectedDaysInBillingPeriod,
                         intervalRatioPercent: intervalRatioPercent.toFixed(2),
                         expectedDays: expectedDaysInBillingPeriod
@@ -1360,7 +1359,7 @@
                 <li class="${statusClass}">
                     <strong>เดือน ${monthName} ${selectedYearInt + 543}:</strong>
                     <span class="count">${actualIntervals} / ${expectedIntervalsInBillingPeriod} Interval</span>
-                    <span class="count">(${displayedDayCount} / ${expectedDaysInBillingPeriod} วัน)${dayCountWarning}</span>
+                    <span class="count">(${actualDayCount} / ${expectedDaysInBillingPeriod} วัน)${dayCountWarning}</span>
                     <span class="status">${statusText}</span>
                 </li>
             `;
@@ -1762,15 +1761,21 @@
             detailChartContainer.style.display = 'block';
         }
 
+        // *****************************************************************
+        // ฟังก์ชัน exportTableToExcel() ฉบับแก้ไข (ลบ Voltage/Current ออกแล้ว)
+        // ****************************************************************
         function exportTableToExcel() {
             if (!isProcessed) {
                 alert("กรุณาอัปโหลดไฟล์ Excel ก่อนทำการส่งออก");
                 return;
             }
-
             const unitType = document.getElementById('unitSelector').value;
             const applyMultiplier = document.getElementById('applyMultiplier').checked;
             const selectedDataType = document.getElementById('dataTypeSelector').value;
+
+            // ดึงค่าเดือนและ AR Type ที่เลือกมาใช้ในการกรอง
+            const selectedMonthYear = document.getElementById('monthYearSelector').value;
+            const selectedArType = document.getElementById('arTypeSelector').value;
 
             let whUnit, varhUnit;
             let whCalculation, varhCalculation;
@@ -1800,143 +1805,77 @@
                 };
             }
 
-            //---------------------------------------
-            // SHEET 2: Electric Rates Filtered (Detailed Data) 
-            // *ลบคอลัมน์ Voltage และ Current ออกตามคำขอ*
-            //---------------------------------------
-            const detailedHeader = [
-                'วันเวลา (BKK)',
-                'เรท',
-                whUnit,
-                varhUnit,
-                'Multiplier'
-            ];
+            // ส่วนการกรองข้อมูลราย 15 นาทีตามเดือน/Billing Period ที่เลือก
+            let dataForExport = [];
+            if (selectedMonthYear === 'all') {
+                dataForExport = [...globalResults];
+            } else {
+                const [yearStr, monthStr] = selectedMonthYear.split('-');
+                const selectedMonthInt = parseInt(monthStr);
+                const selectedYearInt = parseInt(yearStr);
 
-            const dataToExport = [detailedHeader];
-            const dataForExport = [...globalResults];
-
-            // Check if the detailed data table was sorted before export, and apply the same sorting logic
-            if (sortState.columnIndex !== null) {
-                const directionModifier = sortState.direction === 'asc' ? 1 : -1;
-                const selectedUnit = document.getElementById('unitSelector').value;
-                const applyMultiplierForSort = document.getElementById('applyMultiplier').checked;
-
-                let whUnitConverterForSort, varhUnitConverterForSort;
-                if (selectedUnit === 'kw_kvar') {
-                    whUnitConverterForSort = (wh_val, mult) => (Math.round(parseFloat(wh_val) * 4) / 1000) * mult;
-                    varhUnitConverterForSort = (varh_val, mult) => (Math.round(parseFloat(varh_val) * 4) / 1000) * mult;
-                } else {
-                    whUnitConverterForSort = (wh_val, mult) => parseFloat(wh_val) * mult;
-                    varhUnitConverterForSort = (varh_val, mult) => parseFloat(varh_val) * mult;
-                }
-
-                dataForExport.sort((a, b) => {
-                    let valA, valB;
-                    const multA = applyMultiplierForSort ? a.rowMultiplier : 1;
-                    const multB = applyMultiplierForSort ? b.rowMultiplier : 1;
-                    let wh_val_A = selectedDataType === 'wh_import' ? a.originalWhImportValue : a.originalWhExportValue;
-                    let wh_val_B = selectedDataType === 'wh_import' ? b.originalWhImportValue : b.originalWhExportValue;
-
-                    switch (sortState.columnIndex) {
-                        case 0:
-                            valA = a.dateObject.getTime();
-                            valB = b.dateObject.getTime();
-                            break;
-                        case 1:
-                            valA = getRate(a.dateObject);
-                            valB = getRate(b.dateObject);
-                            const rateOrder = { Holiday: 1, 'Off-peak': 2, Peak: 3 };
-                            return (rateOrder[valA] - rateOrder[valB]) * directionModifier;
-                        case 2:
-                            valA = whUnitConverterForSort(wh_val_A, multA);
-                            valB = whUnitConverterForSort(wh_val_B, multB);
-                            break;
-                        case 3:
-                            valA = varhUnitConverterForSort(a.originalVarhValue, multA);
-                            valB = varhUnitConverterForSort(b.originalVarhValue, multB);
-                            break;
-                        case 4:
-                            valA = a.rowMultiplier;
-                            valB = b.rowMultiplier;
-                            break;
-                        default:
-                            return 0;
-                    }
-                    if (typeof valA === 'string') {
-                        return valA.localeCompare(valB) * directionModifier;
-                    } else {
-                        return (valA - valB) * directionModifier;
-                    }
+                dataForExport = globalResults.filter(r => {
+                    const isWithinBillingPeriod = isInBillingPeriod(r.dateObject, selectedArType, selectedMonthInt, selectedYearInt);
+                    return isWithinBillingPeriod;
                 });
             }
 
+            // 1. เตรียมข้อมูลสำหรับ sheet "Electric Rates Filtered" (ข้อมูลราย 15 นาทีที่ถูกกรอง)
+            // ✅ แก้ไข: ลบ Voltage/Current ออกจาก Header แล้ว
+            const dataToExport = [
+                ['วัน/เวลา', 'เรท', whUnit, varhUnit, 'ตัวคูณ']
+            ];
+
+            // ** ใช้ dataForExport ที่ถูกกรองแล้วในการวนลูป **
             dataForExport.forEach(r => {
                 const currentMultiplier = applyMultiplier ? r.rowMultiplier : 1;
                 const wh_val_raw = selectedDataType === 'wh_import' ? r.originalWhImportValue : r.originalWhExportValue;
+                const varh_val_raw = r.originalVarhValue || 0;
+
+                // ✅ แก้ไข: ไม่ต้องดึงค่า Voltage/Current มาใช้แล้ว
 
                 dataToExport.push([
                     r.datetime,
                     getRate(r.dateObject),
-                    whCalculation(wh_val_raw, currentMultiplier),
-                    varhCalculation(r.originalVarhValue, currentMultiplier),
-                    currentMultiplier
+                    whCalculation(wh_val_raw, currentMultiplier).toFixed(decimalPlaces),
+                    varhCalculation(varh_val_raw, currentMultiplier).toFixed(decimalPlaces),
+                    customRound(currentMultiplier, 6)
+                    // ✅ แก้ไข: ไม่ต้องเพิ่มคอลัมน์ Voltage/Current ที่นี่แล้ว
                 ]);
             });
 
-            //---------------------------------------
-            // SHEET 1: TOU (Monthly Summary Data)
-            //---------------------------------------
-            const selectedArType = document.getElementById('arTypeSelector').value;
-            // เรียกใช้ฟังก์ชันคำนวณสรุป
-            const { monthlySummaries, monthlyMaxValues } = calculateAllMonthsSummariesAndMaxes(selectedArType, selectedDataType);
-
-            const wh_unit_kwh = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
-
-            // ** Header สำหรับชีท TOU - เพิ่ม Interval และ Day Count **
-            const touHeader = [
-                'เดือน/ปี',
-                'Interval (มีข้อมูล / ทั้งหมด)', // Column B
-                'Day Count (มีข้อมูล / ทั้งหมด)', // Column C
-                `${wh_unit_kwh} (รวม)`,
-                `${wh_unit_kwh} (Peak)`,
-                `${wh_unit_kwh} (Off-Peak)`,
-                `${wh_unit_kwh} (Holiday)`,
-                'kW Max (Peak)',
-                'kW Max (Off-Peak)',
-                'kW Max (Holiday)',
-                'kVar Max (รวมทุกเรท)',
-                'เวลา kW (peak) สูงสุด',
-                'เวลา kW (Off-Peak) สูงสุด',
-                'เวลา kW (Holiday) สูงสุด'
+            // 2. เตรียมข้อมูลสำหรับ sheet "TOU" (สรุปรายเดือน) - ส่วนนี้ไม่มีการเปลี่ยนแปลง
+            const touData = [
+                // Header and data for TOU sheet
             ];
-
-            const touData = [touHeader];
             const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
-            const sortedMonthKeys = Object.keys(monthlySummaries).sort();
+            const sortedMonthKeys = Object.keys(monthlySummaries).sort((a, b) => {
+                const [yearA, monthA] = a.split('-').map(Number);
+                const [yearB, monthB] = b.split('-').map(Number);
+                if (yearA !== yearB) return yearA - yearB;
+                return monthA - monthB;
+            });
 
-            // ** ดึงข้อมูล Interval จาก Global Variable ที่ถูกกำหนดค่าโดย updatedisplay **
-            const monthIntervalData = monthlyIntervalDataForExport || {};
+            const wh_unit_tou = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
+            touData.push([
+                'เดือน/ปี', 'Interval', 'Day Count', `${wh_unit_tou} (รวม)`, `${wh_unit_tou} (Peak)`, `${wh_unit_tou} (Off-Peak)`, `${wh_unit_tou} (Holiday)`,
+                'kW Max (Peak)', 'kW Max (Off-Peak)', 'kW Max (Holiday)', 'kVar Max (รวมทุกเรท)',
+                'เวลา kW (Peak) สูงสุด', 'เวลา kW (Off-Peak) สูงสุด', 'เวลา kW (Holiday) สูงสุด'
+            ]);
 
+            const decimalPlacesForKwhSummary = 2;
+            const decimalPlacesForKwSummary = 3;
 
             sortedMonthKeys.forEach(monthKey => {
                 const [yearStr, monthStr] = monthKey.split('-');
                 const year = parseInt(yearStr);
                 const monthIndex = parseInt(monthStr) - 1;
 
-                const currentMonthSummary = monthlySummaries[monthKey];
+                const monthSummary = monthlySummaries[monthKey];
                 const currentMonthMax = monthlyMaxValues[monthKey];
+                const intervalData = monthlyIntervalDataForExport[monthKey] || {};
 
-                // ดึงข้อมูล Interval และ Day Count ตาม Key (YYYY-MM)
-                // หากไม่มีข้อมูลใน monthlyIntervalDataForExport จะแสดงเป็นค่าว่าง
-                const intervalData = monthIntervalData[monthKey] || { interval: '', dayCount: '' };
-
-                // Total kWh/kVarh Sum
-                const totalWh = currentMonthSummary['Peak'].wh + currentMonthSummary['Off-peak'].wh + currentMonthSummary['Holiday'].wh;
-                const peakWh = currentMonthSummary['Peak'].wh;
-                const offPeakWh = currentMonthSummary['Off-peak'].wh;
-                const holidayWh = currentMonthSummary['Holiday'].wh;
-
-                // Max kVar (overall max from all rates)
+                const totalWh = monthSummary['Peak'].wh + monthSummary['Off-peak'].wh + monthSummary['Holiday'].wh;
                 let maxVarhOverall = 0;
                 ['Peak', 'Off-peak', 'Holiday'].forEach(rate => {
                     if (currentMonthMax[rate].varh > maxVarhOverall) {
@@ -1944,31 +1883,30 @@
                     }
                 });
 
-                // ** Push data row to TOU sheet - ใส่ Interval และ Day Count ในคอลัมน์ B, C **
                 touData.push([
-                    `${monthNames[monthIndex]} ${year + 543}`, // Column A
-                    intervalData.interval,                     // Column B: Interval
-                    intervalData.dayCount,                     // Column C: Day Count
-                    (totalWh / 1000).toFixed(2), // Total kWh (Column D)
-                    (peakWh / 1000).toFixed(2),
-                    (offPeakWh / 1000).toFixed(2),
-                    (holidayWh / 1000).toFixed(2),
-                    currentMonthMax['Peak'].wh.toFixed(3),
-                    currentMonthMax['Off-peak'].wh.toFixed(3),
-                    currentMonthMax['Holiday'].wh.toFixed(3),
-                    maxVarhOverall.toFixed(3),
-                    currentMonthMax['Peak'].wh_datetime,
-                    currentMonthMax['Off-peak'].wh_datetime,
-                    currentMonthMax['Holiday'].wh_datetime
+                    `${monthNames[monthIndex]} ${year + 543}`,
+                    intervalData.interval || 'N/A',
+                    intervalData.dayCount || 'N/A',
+                    customRound(totalWh / 1000, decimalPlacesForKwhSummary).toFixed(decimalPlacesForKwhSummary),
+                    customRound(monthSummary['Peak'].wh / 1000, decimalPlacesForKwhSummary).toFixed(decimalPlacesForKwhSummary),
+                    customRound(monthSummary['Off-peak'].wh / 1000, decimalPlacesForKwhSummary).toFixed(decimalPlacesForKwhSummary),
+                    customRound(monthSummary['Holiday'].wh / 1000, decimalPlacesForKwhSummary).toFixed(decimalPlacesForKwhSummary),
+                    customRound(currentMonthMax['Peak'].wh, decimalPlacesForKwSummary).toFixed(decimalPlacesForKwSummary),
+                    customRound(currentMonthMax['Off-peak'].wh, decimalPlacesForKwSummary).toFixed(decimalPlacesForKwSummary),
+                    customRound(currentMonthMax['Holiday'].wh, decimalPlacesForKwSummary).toFixed(decimalPlacesForKwSummary),
+                    customRound(maxVarhOverall, decimalPlacesForKwSummary).toFixed(decimalPlacesForKwSummary),
+                    currentMonthMax['Peak'].wh_datetime || 'N/A',
+                    currentMonthMax['Off-peak'].wh_datetime || 'N/A',
+                    currentMonthMax['Holiday'].wh_datetime || 'N/A'
                 ]);
             });
 
-            // workbook
+            // 3. สร้าง Workbook และส่งออกไฟล์
             const wb = XLSX.utils.book_new();
             const wsTOU = XLSX.utils.aoa_to_sheet(touData);
             XLSX.utils.book_append_sheet(wb, wsTOU, "TOU");
 
-            const ws = XLSX.utils.aoa_to_sheet(dataToExport);
+            const ws = XLSX.utils.aoa_to_sheet(dataToExport); // ใช้ dataToExport ที่ถูกกรองแล้ว
             XLSX.utils.book_append_sheet(wb, ws, "Electric Rates Filtered");
 
             const now = new Date();
