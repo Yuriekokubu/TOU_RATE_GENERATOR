@@ -1243,7 +1243,7 @@
             summaryBoxWrapper.innerHTML += meterInfoHtml;
 
             // -----------------------------------------------------
-            // ส่วนที่ 2: Interval Check (พร้อมการแก้ไข 31/30 และการแสดงสถานะ)
+            // ส่วนที่ 2: Interval Check
             // -----------------------------------------------------
 
             const billingPeriodInfoDiv = document.createElement('div');
@@ -1270,7 +1270,7 @@
                     const selectedYearInt = parseInt(yearStr);
                     const monthName = monthNames[selectedMonthInt - 1];
 
-                    // --- BILLING PERIOD CALCULATION ---
+                    // --- BILLING PERIOD CALCULATION (Expected Intervals) ---
                     const numDaysInMonth = getDaysInMonth(selectedYearInt, selectedMonthInt);
 
                     const { startDate, endDate } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
@@ -1281,8 +1281,12 @@
 
                     if (startDate && endDate) {
                         const totalIntervalsMs = endDate.getTime() - startDate.getTime();
-                        expectedIntervalsInBillingPeriod = Math.round(totalIntervalsMs / 900000);
+
+                        // 1. คำนวณจำนวนวันในรอบบิล: ใช้ Math.round เพื่อให้ได้จำนวนวันเต็มที่ถูกต้อง
                         expectedDaysInBillingPeriod = Math.round(totalIntervalsMs / 86400000);
+
+                        // 2. สูตร: นำจำนวนวันมาคูณ 96 โดยตรง
+                        expectedIntervalsInBillingPeriod = expectedDaysInBillingPeriod * 96;
 
                         const startBkk = getBKKTimeComponents(startDate);
                         const endBkk = getBKKTimeComponents(endDate);
@@ -1294,13 +1298,14 @@
                     }
                     // --- END BILLING PERIOD CALCULATION ---
 
-                    // ** นับ Actual Interval และ Day Count **
-                    let actualIntervals = 0;
+                    // ** นับ Actual Interval (Actual Row Count) และ Day Count **
+                    let actualIntervals = 0; // นี่คือตัวแปรสำหรับ Actual Row Count
                     const daysWithData = new Set();
 
                     globalResults.forEach(r => {
+                        // *** การแก้ไขที่สำคัญ: เปลี่ยน < เป็น <= เพื่อรวมแถวสุดท้าย ***
                         if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
-                            actualIntervals++;
+                            actualIntervals++; // 👈 การนับจำนวนแถวข้อมูลจริง
 
                             const bkkComponents = getBKKTimeComponents(r.dateObject);
                             const dateKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}-${bkkComponents.day.toString().padStart(2, '0')}`;
@@ -1318,21 +1323,28 @@
                     const intervalRatioPercent = customRound(intervalRatio * 100, 2);
 
                     let dayCountWarning = '';
-                    
 
-                    // 2. กำหนดสถานะและข้อความเตือนหลัก (รวมการแก้ไขตามคำขอของผู้ใช้: ไม่แสดง ✅ เมื่อ Day Count เกิน)
+                    // 2. กำหนดสถานะและข้อความเตือนหลัก
                     let statusClass = 'complete';
                     let statusText = '✅';
 
-                    if (actualIntervals < expectedIntervalsInBillingPeriod) {
-                        // กรณีที่ 1: Interval ขาด (มี ⚠️)
+                    // ถ้า Actual Intervals เท่ากับ Expected Intervals พอดี จะแสดง ✅
+                    if (actualIntervals === expectedIntervalsInBillingPeriod) {
+                        statusClass = 'complete';
+                        statusText = '✅';
+                    } else if (intervalRatio < 1) {
+                        // กรณีที่ 1: Interval ขาด
                         statusClass = 'warning';
                         statusText = '⚠️';
                     } else if (actualDayCount > expectedDaysInBillingPeriod) {
-                        // กรณีที่ 2: Interval ครบ แต่ Day Count เกิน
-                        // ลบ ✅ ตามคำขอของผู้ใช้ โดยกำหนด statusText เป็นสตริงว่าง
+                        // กรณีที่ 2: Day Count เกิน
                         statusClass = 'anomaly';
                         statusText = '';
+                        dayCountWarning = ' <span class="anomaly-text">(วันเกิน)</span>';
+                    } else if (intervalRatio > 1) {
+                        // กรณีที่ 3: Interval เกิน (ไม่ควรเกิดหลังแก้ไขแล้ว)
+                        statusClass = 'anomaly';
+                        statusText = '🚨';
                     }
 
                     // ** กำหนดค่าให้กับ Object ชั่วคราว **
