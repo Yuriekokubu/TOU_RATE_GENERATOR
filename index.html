@@ -1810,6 +1810,9 @@
         // *****************************************************************
         // ฟังก์ชัน exportTableToExcel() ฉบับปรับตำแหน่งคอลัมน์
         // ****************************************************************
+        // *****************************************************************
+        // ฟังก์ชัน exportTableToExcel() ฉบับปรับตำแหน่งคอลัมน์ใหม่
+        // ****************************************************************
         function exportTableToExcel() {
             if (!isProcessed) {
                 alert("กรุณาอัปโหลดไฟล์ Excel ก่อนทำการส่งออก");
@@ -1889,8 +1892,8 @@
 
             // 2. สร้างข้อมูลสำหรับ TOU Sheet (สรุปรายเดือน)
             const touData = [
-                // ✅ หัวตารางใหม่: B, C, D คือ Interval | E, F คือ Datetime
-                ['เดือน/ปี', 'ระยะเวลา (วัน ชม. นาที)', 'Interval (Actual / Expect)', 'Day Count (Actual / Expect)', 'ช่วงเวลาเริ่มต้น LP (ค่าแรก)', 'ช่วงเวลาสิ้นสุด LP (ค่าสุดท้าย)', `${whUnit} (รวม)`, `${whUnit} (Peak)`, `${whUnit} (Off-peak)`, `${whUnit} (Holiday)`, 'kW Max (Peak)', 'kW Max (Off-peak)', 'kW Max (Holiday)', 'kVar Max (รวมทุกเรท)'],
+                // ✅ หัวตารางใหม่: B=Interval | C=Day Count | D=ระยะเวลา | E=Datetime เริ่ม | F=Datetime สิ้นสุด
+                ['เดือน/ปี', 'Interval (Actual / Expect)', 'Day Count (Actual / Expect)', 'ระยะเวลา (วัน ชม. นาที)', 'ช่วงเวลาเริ่มต้น LP (ค่าแรก)', 'ช่วงเวลาสิ้นสุด LP (ค่าสุดท้าย)', `${whUnit} (รวม)`, `${whUnit} (Peak)`, `${whUnit} (Off-peak)`, `${whUnit} (Holiday)`, 'kW Max (Peak)', 'kW Max (Off-peak)', 'kW Max (Holiday)', 'kVar Max (รวมทุกเรท)'],
             ];
 
             const monthNames = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."];
@@ -1969,14 +1972,14 @@
                     actualIntervals = parseInt(parts[0].trim());
                     expectedIntervalsInBillingPeriod = parseInt(parts[1].trim());
 
-                    // Col B: ระยะเวลา (วัน ชม. นาที) (ใช้ formatIntervals ที่มีอยู่แล้ว)
-                    formattedActualTime = formatIntervals(actualIntervals);
-
-                    // Col C: Interval (Actual / Expect)
+                    // Col B: Interval (Actual / Expect)
                     formattedIntervalString = `${actualIntervals} / ${expectedIntervalsInBillingPeriod}`;
 
-                    // Col D: Day Count (Actual / Expect)
+                    // Col C: Day Count (Actual / Expect)
                     dayCountString = intervalData.dayCount;
+
+                    // Col D: ระยะเวลา (วัน ชม. นาที) (ใช้ formatIntervals ที่มีอยู่แล้ว)
+                    formattedActualTime = formatIntervals(actualIntervals);
                 }
 
                 // -------------------------------------------------------------
@@ -1984,9 +1987,9 @@
                 // -------------------------------------------------------------
                 touData.push([
                     `${monthName} ${year + 543}`,                  // Col A: เดือน/ปี
-                    formattedActualTime,                           // Col B: ระยะเวลา (วัน ชม. นาที) 
-                    formattedIntervalString,                       // Col C: Interval (Actual / Expect) 
-                    dayCountString,                                // Col D: Day Count (Actual / Expect) 
+                    formattedIntervalString,                       // Col B: Interval (Actual / Expect) 
+                    dayCountString,                                // Col C: Day Count (Actual / Expect) 
+                    formattedActualTime,                           // Col D: ระยะเวลา (วัน ชม. นาที) (NEW POSITION)
                     firstRecordDatetime,                           // Col E: ค่าแรกจาก filtered data
                     lastRecordDatetime,                            // Col F: ค่าสุดท้ายจาก filtered data
 
