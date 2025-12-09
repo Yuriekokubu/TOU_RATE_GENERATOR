@@ -2,7 +2,8 @@
 
 :root {
 	--bg-color: #f0f0f0;
-	--primary-color: #5a7d9a; /* A softer blue */
+	--primary-color: #5a7d9a;
+	/* A softer blue */
 	--text-color: #333;
 	--shadow-light: #ffffff;
 	--shadow-dark: #d1d9e6;
@@ -16,7 +17,8 @@ body {
 	color: var(--text-color);
 	display: flex;
 	justify-content: center;
-	align-items: flex-start; /* Align to top */
+	align-items: flex-start;
+	/* Align to top */
 	min-height: 100vh;
 	margin: 0;
 	padding: var(--spacing);
@@ -32,7 +34,8 @@ body {
 	width: 100%;
 	box-sizing: border-box;
 	text-align: center;
-	margin-top: var(--spacing); /* Add some margin to the top */
+	margin-top: var(--spacing);
+	/* Add some margin to the top */
 	flex: 1;
 }
 
@@ -122,7 +125,8 @@ select {
 	padding: 12px 15px;
 	border: none;
 	background-color: transparent;
-	appearance: none; /* Remove default arrow */
+	appearance: none;
+	/* Remove default arrow */
 	-webkit-appearance: none;
 	-moz-appearance: none;
 	font-family: "Sarabun", sans-serif;
@@ -133,7 +137,8 @@ select {
 }
 
 .select-wrapper::after {
-	content: "▼"; /* Custom arrow */
+	content: "▼";
+	/* Custom arrow */
 	position: absolute;
 	top: 50%;
 	right: 15px;
@@ -145,8 +150,10 @@ select {
 /* --- Simplified Checkbox Styles --- */
 .checkbox-group {
 	display: flex;
-	align-items: center; /* Align checkbox and text vertically */
-	padding: 12px 0; /* Match vertical padding of other controls */
+	align-items: center;
+	/* Align checkbox and text vertically */
+	padding: 12px 0;
+	/* Match vertical padding of other controls */
 }
 
 /* Hide the default browser checkbox */
@@ -160,14 +167,16 @@ select {
 
 .custom-checkbox {
 	position: relative;
-	padding-left: 30px; /* Space for the custom checkbox */
+	padding-left: 30px;
+	/* Space for the custom checkbox */
 	cursor: pointer;
 	font-weight: 600;
 	color: var(--primary-color);
 	user-select: none;
 	display: flex;
 	align-items: center;
-	min-height: 20px; /* Adjust height as needed */
+	min-height: 20px;
+	/* Adjust height as needed */
 	margin-bottom: 0;
 }
 
@@ -177,13 +186,19 @@ select {
 	left: 0;
 	top: 50%;
 	transform: translateY(-50%);
-	height: 20px; /* Size of the custom box */
-	width: 20px; /* Size of the custom box */
-	background-color: #eee; /* Light gray box background */
-	border: 1px solid #ccc; /* Simple gray border */
-	border-radius: 4px; /* Slightly rounded corners */
+	height: 20px;
+	/* Size of the custom box */
+	width: 20px;
+	/* Size of the custom box */
+	background-color: #eee;
+	/* Light gray box background */
+	border: 1px solid #ccc;
+	/* Simple gray border */
+	border-radius: 4px;
+	/* Slightly rounded corners */
 	transition: background-color 0.2s, border-color 0.2s;
-	z-index: 1; /* อยู่ด้านล่าง */
+	z-index: 1;
+	/* อยู่ด้านล่าง */
 }
 
 /* This is the checkmark (✔) */
@@ -191,7 +206,8 @@ select {
 	position: absolute;
 	left: 0px;
 	top: 50%;
-	transform: translateY(-50%) scale(0); /* Hidden by default */
+	transform: translateY(-50%) scale(0);
+	/* Hidden by default */
 	height: 20px;
 	width: 20px;
 	display: flex;
@@ -201,23 +217,27 @@ select {
 	color: #28a745;
 	transition: transform 0.2s ease;
 	text-shadow: 0 0 2px rgba(0, 0, 0, 0.3);
-	z-index: 2; /* อยู่ด้านบน */
+	z-index: 2;
+	/* อยู่ด้านบน */
 }
 
 /* When the real checkbox is checked, show the checkmark and change box style */
-.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-unchecked {
+.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-unchecked {
 	background-color: #e0e0e0;
 	border-color: #28a745;
 }
 
-.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-checked {
-	transform: translateY(-50%) scale(1); /* Show the checkmark */
+.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-checked {
+	transform: translateY(-50%) scale(1);
+	/* Show the checkmark */
 }
+
 /* --- End Simplified Checkbox Styles --- */
 
 /* Summary Boxes */
 .summary-box {
-	text-align: center; /* เปลี่ยนจาก left เป็น center */
+	text-align: center;
+	/* เปลี่ยนจาก left เป็น center */
 	padding: var(--spacing);
 	border-radius: var(--border-radius);
 	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
@@ -254,7 +274,8 @@ table {
 	margin-top: var(--spacing);
 	background-color: var(--bg-color);
 	border-radius: var(--border-radius);
-	overflow: hidden; /* Ensures rounded corners apply to content */
+	overflow: hidden;
+	/* Ensures rounded corners apply to content */
 	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
 }
 
@@ -272,17 +293,20 @@ th {
 	position: sticky;
 	top: 0;
 	z-index: 10;
-	cursor: pointer; /* Indicate sortable */
+	cursor: pointer;
+	/* Indicate sortable */
 	transition: background-color 0.3s ease;
 }
 
 th.sortable {
 	position: relative;
-	padding-right: 15px; /* ลดพื้นที่ด้านขวาลง เพราะไม่มีไอคอน */
+	padding-right: 15px;
+	/* ลดพื้นที่ด้านขวาลง เพราะไม่มีไอคอน */
 }
 
 th:hover {
-	background-color: #4a6c84; /* Slightly darker primary on hover */
+	background-color: #4a6c84;
+	/* Slightly darker primary on hover */
 }
 
 tbody tr {
@@ -290,95 +314,124 @@ tbody tr {
 }
 
 tbody tr:nth-child(even) {
-	background-color: #e6e6e6; /* Lighter background for even rows */
+	background-color: #e6e6e6;
+	/* Lighter background for even rows */
 }
 
 tbody tr:hover {
-	background-color: #d8d8d8; /* Highlight on hover */
+	background-color: #d8d8d8;
+	/* Highlight on hover */
 	box-shadow: inset 2px 2px 5px var(--shadow-dark), inset -2px -2px 5px var(--shadow-light);
 }
 
 /* Specific row styles based on rate */
 .peak {
-	background-color: #ffe0e0; /* Red for Peak */
+	background-color: #ffe0e0;
+	/* Red for Peak */
 }
 
 .offpeak {
-	background-color: #e0f2f7; /* Blue for Off-peak */
+	background-color: #e0f2f7;
+	/* Blue for Off-peak */
 }
 
 .holiday {
-	background-color: #e6ffe6; /* Green for Holiday */
+	background-color: #e6ffe6;
+	/* Green for Holiday */
 }
 
 /* สำหรับเรท Peak */
 .peak:hover {
-	background-color: #ffb3b3; /* สีแดงอ่อนลงเมื่อโฮเวอร์ */
+	background-color: #ffb3b3;
+	/* สีแดงอ่อนลงเมื่อโฮเวอร์ */
 }
 
 /* สำหรับเรท Off-peak */
 .offpeak:hover {
 	/* ใช้ .offpeak ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
-	background-color: #b3d9ff; /* สีฟ้าอ่อนลงเมื่อโฮเวอร์ (ปรับจากสีเขียวในคำขอเดิมให้เข้ากับสีฟ้าของ offpeak) */
+	background-color: #b3d9ff;
+	/* สีฟ้าอ่อนลงเมื่อโฮเวอร์ (ปรับจากสีเขียวในคำขอเดิมให้เข้ากับสีฟ้าของ offpeak) */
 }
 
 /* สำหรับเรท Holiday */
 .holiday:hover {
 	/* ใช้ .holiday ไม่มีขีดกลาง ตามที่กำหนดใน HTML */
-	background-color: #cce0cc; /* สีเขียวอ่อนลงเมื่อโฮเวอร์ */
+	background-color: #cce0cc;
+	/* สีเขียวอ่อนลงเมื่อโฮเวอร์ */
 }
 
 /* --- New Button Styles (General & Export Specific) --- */
 /* General button styling */
 .button {
-	font-family: "Sarabun", sans-serif; /* ใช้ Font Sarabun ตามที่คุณกำหนด */
+	font-family: "Sarabun", sans-serif;
+	/* ใช้ Font Sarabun ตามที่คุณกำหนด */
 	padding: 12px 25px;
 	border: none;
-	border-radius: var(--border-radius); /* ใช้ตัวแปร border-radius */
+	border-radius: var(--border-radius);
+	/* ใช้ตัวแปร border-radius */
 	cursor: pointer;
 	font-size: 1rem;
 	font-weight: 600;
-	transition: all 0.2s ease-in-out; /* เพื่อให้ animation ดูนุ่มนวล */
+	transition: all 0.2s ease-in-out;
+	/* เพื่อให้ animation ดูนุ่มนวล */
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 8px; /* ระยะห่างระหว่าง icon กับ text ถ้ามี */
-	color: var(--text-color); /* ใช้สีข้อความหลัก */
+	gap: 8px;
+	/* ระยะห่างระหว่าง icon กับ text ถ้ามี */
+	color: var(--text-color);
+	/* ใช้สีข้อความหลัก */
 }
 
 /* Neumorphism Base Style for all buttons */
 .button {
-	background-color: var(--bg-color); /* สีพื้นหลังเดียวกับพื้นหลัง container */
-	box-shadow: 6px 6px 12px var(--shadow-dark), /* เงาล่างขวาเข้ม (กดแล้วจมลง) */ -6px -6px 12px var(--shadow-light); /* เงาบนซ้ายสว่าง (ยกขึ้น) */
+	background-color: var(--bg-color);
+	/* สีพื้นหลังเดียวกับพื้นหลัง container */
+	box-shadow: 6px 6px 12px var(--shadow-dark),
+		/* เงาล่างขวาเข้ม (กดแล้วจมลง) */
+		-6px -6px 12px var(--shadow-light);
+	/* เงาบนซ้ายสว่าง (ยกขึ้น) */
 }
 
 /* Style for Export Button specifically */
 #exportExcel {
-	background-color: #d1e7dd; /* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
-	color: #285430; /* สีข้อความเข้มขึ้น */
-	box-shadow: 6px 6px 12px #a7a7a7, /* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */ -6px -6px 12px #ffffff;
+	background-color: #d1e7dd;
+	/* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
+	color: #285430;
+	/* สีข้อความเข้มขึ้น */
+	box-shadow: 6px 6px 12px #a7a7a7,
+		/* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */
+		-6px -6px 12px #ffffff;
 }
 
 /* Hover effect */
 #exportExcel:hover {
-	background-color: #c0dbc2; /* สีเขียวอ่อนลงเมื่อ hover */
+	background-color: #c0dbc2;
+	/* สีเขียวอ่อนลงเมื่อ hover */
 	box-shadow: 4px 4px 8px #a7a7a7, -4px -4px 8px #ffffff;
-	transform: translateY(-2px); /* ยกปุ่มขึ้นเล็กน้อย */
+	transform: translateY(-2px);
+	/* ยกปุ่มขึ้นเล็กน้อย */
 }
 
 /* Active (clicked) effect */
 #exportExcel:active {
-	background-color: #acd8ae; /* สีเขียวเข้มขึ้นเมื่อถูกกด */
-	box-shadow: inset 2px 2px 5px #a7a7a7, /* เงาด้านใน ให้ดูจมลง */ inset -3px -3px 7px #ffffff;
-	transform: translateY(0); /* กลับมาตำแหน่งเดิม */
+	background-color: #acd8ae;
+	/* สีเขียวเข้มขึ้นเมื่อถูกกด */
+	box-shadow: inset 2px 2px 5px #a7a7a7,
+		/* เงาด้านใน ให้ดูจมลง */
+		inset -3px -3px 7px #ffffff;
+	transform: translateY(0);
+	/* กลับมาตำแหน่งเดิม */
 }
 
 /* Optional: Add an icon to the button */
 #exportExcel::before {
-	content: "📊"; /* Unicode for a chart/spreadsheet icon */
+	content: "📊";
+	/* Unicode for a chart/spreadsheet icon */
 	font-size: 1.1em;
 	margin-right: 5px;
 }
+
 /* --- End New Button Styles --- */
 
 /* Responsive adjustments */
@@ -388,11 +441,13 @@ tbody tr:hover {
 	}
 
 	.controls {
-		grid-template-columns: 1fr; /* Stack controls on small screens */
+		grid-template-columns: 1fr;
+		/* Stack controls on small screens */
 	}
 
 	.rate-summary-container {
-		grid-template-columns: 1fr; /* Stack summary boxes */
+		grid-template-columns: 1fr;
+		/* Stack summary boxes */
 	}
 
 	th,
@@ -403,17 +458,20 @@ tbody tr:hover {
 }
 
 .summary-box.summary-peak {
-	background-color: #ffe0e0; /* A shade of red for Peak */
+	background-color: #ffe0e0;
+	/* A shade of red for Peak */
 	border: 1px solid #ff4d4d;
 }
 
 .summary-box.summary-off-peak {
-	background-color: #e0f2f7; /* A shade of blue for Off-peak */
+	background-color: #e0f2f7;
+	/* A shade of blue for Off-peak */
 	border: 1px solid #4da6ff;
 }
 
 .summary-box.summary-holiday {
-	background-color: #e6ffe6; /* A shade of green for Holiday */
+	background-color: #e6ffe6;
+	/* A shade of green for Holiday */
 	border: 1px solid #66cc66;
 }
 
@@ -423,19 +481,22 @@ tbody tr:hover {
 	gap: 20px;
 	flex-wrap: wrap;
 }
+
 .summary-box {
 	flex: 1;
 	min-width: 200px;
 }
 
 .monthly-summary-table-container {
-	margin-bottom: 30px; /* เพิ่มช่องว่างด้านล่าง 30px */
+	margin-bottom: 30px;
+	/* เพิ่มช่องว่างด้านล่าง 30px */
 }
 
 /* Update your existing styles with the following changes */
 /* Adjustments for text and layout inside summary boxes */
 .summary-box {
-	text-align: left; /* จัดข้อความทั้งหมดภายในกล่องให้อยู่ชิดซ้ายเป็นค่าเริ่มต้น */
+	text-align: left;
+	/* จัดข้อความทั้งหมดภายในกล่องให้อยู่ชิดซ้ายเป็นค่าเริ่มต้น */
 	padding: var(--spacing);
 	border-radius: var(--border-radius);
 	box-shadow: 7px 7px 14px var(--shadow-dark), -7px -7px 14px var(--shadow-light);
@@ -443,7 +504,8 @@ tbody tr:hover {
 }
 
 .summary-box h3 {
-	text-align: center; /* จัดหัวข้อให้อยู่ตรงกลาง */
+	text-align: center;
+	/* จัดหัวข้อให้อยู่ตรงกลาง */
 	color: var(--primary-color);
 	margin-top: 0;
 	margin-bottom: 10px;
@@ -453,7 +515,8 @@ tbody tr:hover {
 .summary-box p {
 	margin: 5px 0;
 	font-size: 1.1em;
-	line-height: 1.5; /* เพิ่มระยะห่างระหว่างบรรทัดเพื่อให้อ่านง่ายขึ้น */
+	line-height: 1.5;
+	/* เพิ่มระยะห่างระหว่างบรรทัดเพื่อให้อ่านง่ายขึ้น */
 }
 
 .summary-box strong {
@@ -464,14 +527,17 @@ tbody tr:hover {
 .summary-box.meter-info p {
 	margin-bottom: 0;
 }
+
 .summary-box.meter-info p:first-of-type {
 	margin-bottom: 15px;
 }
 
 /* Additional styling for the multiplier list */
 .summary-box.meter-info .multiplier-list {
-	list-style-type: none; /* ลบจุดนำหน้าลิสต์ */
-	padding-left: 0; /* ลบ padding ด้านซ้าย */
+	list-style-type: none;
+	/* ลบจุดนำหน้าลิสต์ */
+	padding-left: 0;
+	/* ลบ padding ด้านซ้าย */
 	margin-top: 10px;
 }
 
@@ -492,7 +558,8 @@ tbody tr:hover {
 .pagination-controls button {
 	background: #f0f0f3;
 	border: none;
-	border-radius: 50%; /* ให้เป็นวงกลม จะสวยขึ้น */
+	border-radius: 50%;
+	/* ให้เป็นวงกลม จะสวยขึ้น */
 	width: 40px;
 	height: 40px;
 	margin: 0 8px;
@@ -516,13 +583,16 @@ tbody tr:hover {
 }
 
 .pagination-controls {
-	margin-top: 24px; /* ระยะห่างจากกล่องข้างบน */
-	margin-bottom: 32px; /* ระยะห่างจากกล่องข้างล่าง */
+	margin-top: 24px;
+	/* ระยะห่างจากกล่องข้างบน */
+	margin-bottom: 32px;
+	/* ระยะห่างจากกล่องข้างล่าง */
 	text-align: center;
 }
 
 .output-section {
-	margin-top: 40px; /* เพิ่มระยะห่างด้านบน */
+	margin-top: 40px;
+	/* เพิ่มระยะห่างด้านบน */
 }
 
 @media (max-width: 768px) {
@@ -541,7 +611,8 @@ tbody tr:hover {
 .summary-list {
 	display: flex;
 	flex-direction: column;
-	gap: 10px; /* Space between each summary row */
+	gap: 10px;
+	/* Space between each summary row */
 }
 
 .summary-list-item {
@@ -561,12 +632,15 @@ tbody tr:hover {
 .summary-list-item.peak-row {
 	background-color: #fae0e0;
 }
+
 .summary-list-item.off-peak-row {
 	background-color: #e0f7fa;
 }
+
 .summary-list-item.holiday-row {
 	background-color: #e6ffe6;
 }
+
 .summary-list-item.total-row {
 	background-color: #c9e6ff;
 	font-weight: bold;
@@ -585,14 +659,76 @@ tbody tr:hover {
 
 /* ใช้คลาสนี้ในการควบคุมขนาดกราฟหลัก */
 .large-chart-container {
-    height: 400px; /* เพิ่มความสูงเพื่อให้กราฟใหญ่ตามต้องการ */
-    margin: 20px auto;
-    padding: 15px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background-color: #fff;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    display: none; /* เริ่มต้นซ่อนไว้ และให้ JS จัดการแสดงผล */
+	height: 400px;
+	/* เพิ่มความสูงเพื่อให้กราฟใหญ่ตามต้องการ */
+	margin: 20px auto;
+	padding: 15px;
+	border: 1px solid #ddd;
+	border-radius: 8px;
+	background-color: #fff;
+	box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+	display: none;
+	/* เริ่มต้นซ่อนไว้ และให้ JS จัดการแสดงผล */
 }
+
 /* ถ้าคุณมี .chart-container เดิม ควรลบออกหรือรวมไปที่นี่ */
 
+/* เพิ่มใน style.css */
+
+/* Container สำหรับ Dropdown */
+.floating-dropdown {
+	position: fixed;
+	bottom: 20px;
+	right: 20px;
+	z-index: 1000;
+}
+
+/* ปุ่มหลัก (คงสไตล์เดิมไว้) */
+.floating-btn {
+	background-color: #0070C0;
+	color: white;
+	border: none;
+	border-radius: 8px;
+	padding: 10px 15px;
+	font-size: 16px;
+	cursor: pointer;
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+	transition: background-color 0.3s, transform 0.2s;
+}
+
+.floating-btn:hover {
+	background-color: #005A9C;
+	transform: translateY(-2px);
+}
+
+.dropdown-content {
+	display: none;
+	position: absolute;
+	bottom: 100%;
+	/* แสดงอยู่เหนือปุ่ม */
+	right: 0;
+	background-color: #f9f9f9;
+	min-width: 160px;
+	box-shadow: 0px 8px 16px 0px rgba(0, 0, 0, 0.2);
+	border-radius: 5px;
+	/* *** แก้ไขตรงนี้ *** */
+	margin-bottom: 0px;
+	/* เปลี่ยนจาก 5px เป็น 0px เพื่อลบช่องว่าง */
+}
+
+.dropdown-content a {
+	color: black;
+	padding: 12px 16px;
+	text-decoration: none;
+	display: block;
+	text-align: left;
+	font-size: 14px;
+}
+
+.dropdown-content a:hover {
+	background-color: #ddd;
+}
+
+.floating-dropdown:hover .dropdown-content {
+	display: block;
+}

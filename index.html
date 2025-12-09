@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="style.css">
     <link rel="icon" type="image/png" href="favicon.png">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
     <script src="./holiday_results/holiday_2022.js"></script>
@@ -16,6 +17,14 @@
 </head>
 
 <body>
+    <div class="floating-dropdown">
+        <button id="templateDropdownBtn" class="floating-btn" title="Export Data Template">⬇️ Export Template</button>
+
+        <div class="dropdown-content" id="templateDropdown">
+            <a href="#" id="exportFullTemplate">Full Template (40 Cols)</a>
+            <a href="#" id="exportMiniTemplate">Mini Template (3 Cols)</a>
+        </div>
+    </div>
     <div class="container">
         <h1>ตรวจสอบเรทไฟฟ้าจากไฟล์ Excel</h1>
 
@@ -2033,6 +2042,194 @@
             }
         }
         document.addEventListener('DOMContentLoaded', updateExportButtonVisibility);
+
+        // =========================================================
+        // Constants (Header Definitions)
+        // =========================================================
+        const CUSTOMER_HEADERS_TEMPLATE = [
+            'METERPOINTID', 'AREA', 'CUSTOMERCODE', 'CA', 'PEA NO', 'CUSTOMER NAME',
+            'ADDRESS', 'PHONE NUMBER', 'FAX NUMBER', 'CONTACT NAME', 'EMAIL',
+            'WEB SITE', 'RATE CODE', 'RATE', 'TARIFF', 'INDUSTRIAL SECTION',
+            'TSIC', 'CT, VT', 'KVA', 'BIILING RESET', 'VSPP'
+        ];
+
+        const LP_HEADERS_ROW3 = [
+            'METERPEA', 'METERPOINTID', 'DATE_M', 'Load Profile Status',
+            'CTP', 'CTS', 'VTP', 'VTS',
+            'VOLTA', 'VOLTB', 'VOLTC',
+            'AMPSA', 'AMPSB', 'AMPSC',
+            'THDVA', 'THDVB', 'THDVC',
+            'THDIA', 'THDIB', 'THDIC',
+            'ANGLE A', 'ANGLE B', 'ANGLE C',
+            'WHIMP A', 'WHIMP B', 'WHIMP C', 'WHIMP Total',
+            'WHEXP A', 'WHEXP B', 'WHEXP C', 'WHEXP Total',
+            'VARHIMP A', 'VARHIMP B', 'VARHIMP C', 'VARHIMP Total',
+            'VARHEXP A', 'VARHEXP B', 'VARHEXP C', 'VARHEXP Total',
+            'PF T'
+        ];
+
+        const MINI_LP_HEADERS = ['DATE_M', 'WH', 'VARHIMP Total'];
+
+        // ฟังก์ชันช่วยในการตั้งค่า Header ที่มีการ Merge และใส่ Border (Row 2)
+        function setMergedHeader(lpSheet, label, startCol, endCol) {
+            lpSheet.mergeCells(2, startCol, 2, endCol);
+            const cell = lpSheet.getRow(2).getCell(startCol);
+            cell.value = label;
+            cell.font = { bold: true };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+            for (let c = startCol; c <= endCol; c++) {
+                lpSheet.getRow(2).getCell(c).border = {
+                    top: { style: 'thin' }, left: { style: 'thin' },
+                    bottom: { style: 'thin' }, right: { style: 'thin' }
+                };
+            }
+        }
+
+        const defaultThinBorder = {
+            top: { style: 'thin' }, left: { style: 'thin' },
+            bottom: { style: 'thin' }, right: { style: 'thin' }
+        };
+        const headerFillStyle = {
+            font: { bold: true, color: { argb: "FFFFFFFF" } },
+            fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0070C0' } }, // สีพื้นหลัง: น้ำเงิน
+            alignment: { horizontal: 'center', vertical: 'middle' }
+        };
+
+        // =========================================================
+        // 1. ฟังก์ชันสำหรับ FULL TEMPLATE (40 คอลัมน์ + Customer Info)
+        // =========================================================
+        async function exportFullTemplate(e) {
+            e.preventDefault(); // ป้องกันการเปลี่ยนหน้าของ A Tag
+            const workbook = new ExcelJS.Workbook();
+            const totalCols = LP_HEADERS_ROW3.length;
+            const filename = `Electric_Data_Template_Full_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`;
+
+            // --- Load Profile Sheet (Sheet 1) ---
+            const lpSheet = workbook.addWorksheet('Load Profile');
+
+            // Row 1: Title (Merge A1:AN1)
+            lpSheet.mergeCells(1, 1, 1, totalCols);
+            const titleCell = lpSheet.getCell('A1');
+            titleCell.value = 'DATA FROM METER';
+            titleCell.font = { bold: true, size: 14 };
+            titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+
+            // Row 2: Merged Group Headers 
+            setMergedHeader(lpSheet, 'CT', 5, 6);
+            setMergedHeader(lpSheet, 'VT', 7, 8);
+            setMergedHeader(lpSheet, 'VOLTAGE', 9, 11);
+            setMergedHeader(lpSheet, 'CURRENT', 12, 14);
+            setMergedHeader(lpSheet, 'VOLTAGE THD', 15, 17);
+            setMergedHeader(lpSheet, 'CURRENT THD', 18, 20);
+            setMergedHeader(lpSheet, 'ANGLE', 21, 23);
+            setMergedHeader(lpSheet, 'WATT-HOUR IMP', 24, 27);
+            setMergedHeader(lpSheet, 'WATT-HOUR EXP', 28, 31);
+            setMergedHeader(lpSheet, 'VAR-HOUR IMP', 32, 35);
+            setMergedHeader(lpSheet, 'VAR-HOUR EXP', 36, 39);
+            setMergedHeader(lpSheet, 'POWER FACTOR', 40, 40);
+
+            // Row 3: Detail Headers (ใส่สีพื้นหลังและเส้นตาราง)
+            lpSheet.getRow(3).values = LP_HEADERS_ROW3;
+            lpSheet.getRow(3).eachCell(cell => {
+                Object.assign(cell, headerFillStyle);
+                cell.border = defaultThinBorder;
+            });
+
+            // เพิ่มแถวข้อมูลเปล่า 1 แถว + ใส่เส้นตาราง
+            const exampleRow = Array(totalCols).fill('');
+            exampleRow[2] = 'YYYY/MM/DD HH:MM:SS';
+            lpSheet.addRow(exampleRow);
+            lpSheet.getRow(4).eachCell(cell => {
+                cell.border = defaultThinBorder;
+            });
+            lpSheet.getColumn(3).numFmt = 'yyyy/mm/dd hh:mm';
+            lpSheet.columns.forEach(col => { col.width = 15; });
+
+
+            // --- Customer Info Sheet (Sheet 2) ---
+            const customerSheet = workbook.addWorksheet('Customer Info');
+            customerSheet.addRow(['Key', 'Value']);
+            const headerRow = customerSheet.getRow(1);
+            Object.assign(headerRow.eachCell, headerFillStyle);
+            headerRow.eachCell(cell => {
+                cell.border = defaultThinBorder;
+            });
+
+            CUSTOMER_HEADERS_TEMPLATE.forEach(header => { customerSheet.addRow([header, '']); });
+            for (let r = 2; r <= CUSTOMER_HEADERS_TEMPLATE.length + 1; r++) {
+                customerSheet.getRow(r).eachCell(cell => { cell.border = defaultThinBorder; });
+            }
+            customerSheet.columns.forEach(col => { col.width = 25; });
+
+            // --- Download ---
+            await downloadExcel(workbook, filename);
+        }
+
+        // =========================================================
+        // 2. ฟังก์ชันสำหรับ MINI TEMPLATE (3 คอลัมน์)
+        // =========================================================
+        async function exportMiniTemplate(e) {
+            e.preventDefault();
+            const workbook = new ExcelJS.Workbook();
+            const miniCols = MINI_LP_HEADERS.length; // 3 columns
+            const filename = `Electric_Data_Template_Mini_${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.xlsx`;
+
+            // --- Mini Load Profile Sheet (Sheet 1) ---
+            const lpSheet = workbook.addWorksheet('Mini Load Profile');
+
+            // Row 1: Headers (ใช้ MINI_LP_HEADERS)
+            lpSheet.addRow(MINI_LP_HEADERS);
+
+            // Apply styling to Row 1 (Header)
+            lpSheet.getRow(1).eachCell(cell => {
+                // ใช้ Object.assign เพื่อรวมสไตล์ Header Fill (สีน้ำเงิน)
+                Object.assign(cell, headerFillStyle);
+                cell.border = defaultThinBorder;
+            });
+
+            // Row 2: Example Data (Value)
+            lpSheet.addRow(['YYYY/MM/DD HH:MM:SS', '', '']);
+
+            // ใส่เส้นตารางให้ Row 2
+            lpSheet.getRow(2).eachCell(cell => { cell.border = defaultThinBorder; });
+
+            // กำหนด Format วันที่ (Column 1)
+            lpSheet.getColumn(1).numFmt = 'yyyy/mm/dd hh:mm';
+
+            // Set Column Widths
+            lpSheet.columns.forEach(col => { col.width = 20; });
+
+            // --- Download ---
+            await downloadExcel(workbook, filename);
+        }
+
+        // =========================================================
+        // 3. ฟังก์ชัน Download กลาง
+        // =========================================================
+        async function downloadExcel(workbook, filename) {
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+            const url = URL.createObjectURL(blob);
+
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            URL.revokeObjectURL(url);
+            console.log(`✅ Excel Template exported successfully: ${filename}`);
+        }
+
+        // =========================================================
+        // 4. Attach Listeners (เชื่อมต่อกับ A Tag ใหม่)
+        // =========================================================
+        document.getElementById('exportFullTemplate').addEventListener('click', exportFullTemplate);
+        document.getElementById('exportMiniTemplate').addEventListener('click', exportMiniTemplate);
+
+
 
 
     </script>
