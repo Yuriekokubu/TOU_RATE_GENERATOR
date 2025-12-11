@@ -18,8 +18,10 @@
 
 <body>
     <div class="floating-dropdown">
-        <button id="templateDropdownBtn" class="floating-btn" title="Export Data Template">⬇️ Export Template</button>
-
+        <button id="templateDropdownBtn" class="floating-btn" title="Export Data Template">
+            <span class="btn-icon">⬇️</span>
+            <span class="btn-text">Export Template</span>
+        </button>
         <div class="dropdown-content" id="templateDropdown">
             <a href="#" id="exportFullTemplate">Full Template (40 Cols)</a>
             <a href="#" id="exportMiniTemplate">Mini Template (3 Cols)</a>
@@ -1168,6 +1170,75 @@
         // ประกาศในส่วนบนของ <script> ก่อนฟังก์ชันอื่น ๆ
         let monthlyIntervalDataForExport = {};
 
+        // =========================================================
+        // 5. Interval Gap Checking Logic (ฟังก์ชันสำหรับหาช่วงเวลาที่หายไป)
+        // =========================================================
+
+        // Helper 1: ฟังก์ชันช่วย Format Date object กลับไปเป็น String
+        const formatDate = (date) => {
+            // PadStart(2, '0') คือการเติม 0 ข้างหน้าถ้าตัวเลขมีหลักเดียว
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            const h = String(date.getHours()).padStart(2, '0');
+            const min = String(date.getMinutes()).padStart(2, '0');
+            const s = String(date.getSeconds()).padStart(2, '0');
+            return `${y}/${m}/${d} ${h}:${min}:${s}`;
+        };
+
+        // Helper 2: ฟังก์ชันช่วยแปลง String Timestamp เป็น Date Object อย่างแม่นยำ
+        const parseDate = (timestampStr) => {
+            // ใช้ Regex เพื่อแยกส่วนประกอบของวันที่และเวลา
+            const parts = timestampStr.match(/(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})/);
+            if (parts) {
+                // new Date(year, monthIndex, day, hours, minutes, seconds)
+                // Month Index ต้องลบ 1 (เดือน 10 คือ 9)
+                return new Date(
+                    parseInt(parts[1]), // ปี
+                    parseInt(parts[2]) - 1, // เดือน (0-based)
+                    parseInt(parts[3]), // วัน
+                    parseInt(parts[4]), // ชั่วโมง
+                    parseInt(parts[5]), // นาที
+                    parseInt(parts[6]) // วินาที
+                );
+            }
+            return null;
+        };
+
+        function findIntervalGaps(timestampData) {
+            if (timestampData.length === 0) return [];
+
+            // เรียงลำดับเพื่อให้แน่ใจว่าการตรวจสอบเป็นไปตามลำดับเวลา
+            const sortedData = [...timestampData].sort();
+
+            const expectedIntervalMs = 15 * 60 * 1000; // 15 นาที ในหน่วยมิลลิวินาที
+            const gaps = [];
+
+            for (let i = 1; i < sortedData.length; i++) {
+                const prevTime = parseDate(sortedData[i - 1]);
+                const currTime = parseDate(sortedData[i]);
+
+                if (!prevTime || !currTime) continue;
+
+                const diffMs = currTime.getTime() - prevTime.getTime();
+                const expectedIntervalsInGap = Math.round(diffMs / expectedIntervalMs) - 1;
+
+                if (expectedIntervalsInGap > 0) {
+
+                    let missingTime = new Date(prevTime.getTime() + expectedIntervalMs);
+
+                    for (let j = 0; j < expectedIntervalsInGap; j++) {
+                        gaps.push(formatDate(missingTime));
+
+                        // เลื่อนไปยังเวลาถัดไป (เพิ่มอีก 15 นาที)
+                        missingTime.setTime(missingTime.getTime() + expectedIntervalMs);
+                    }
+                }
+            }
+
+            return gaps;
+        }
+
 
 
         function updateDisplay() {
@@ -1309,29 +1380,67 @@
 
                     // ** นับ Actual Interval (Actual Row Count) และ Day Count **
                     let actualIntervals = 0; // นี่คือตัวแปรสำหรับ Actual Row Count
+                    let monthlyTimestamps = []; // 👈 [NEW] Array สำหรับเก็บ Timestamp ในเดือนนี้
 
                     globalResults.forEach(r => {
                         // *** การแก้ไขที่สำคัญ: เปลี่ยน < เป็น <= เพื่อรวมแถวสุดท้าย ***
                         if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
                             actualIntervals++; // 👈 การนับจำนวนแถวข้อมูลจริง
+                            monthlyTimestamps.push(r.datetime); // 👈 [NEW] เก็บ Timestamp ที่อยู่ในช่วงบิล
                         }
                     });
 
                     // ✅ แก้ไข: คำนวณ Actual Day Count จาก Actual Intervals
                     const actualDayCount = Math.floor(actualIntervals / 96); // 👈 การแก้ไขหลัก: หาร Interval ด้วย 96 แล้วปัดเศษลง
 
+                    // ----------------------------------------------------------------------------------------------------------------------------------------
+                    // 💡 [NEW] ตรวจสอบช่วงเวลาที่หายไป/ไม่ต่อเนื่อง
+                    // ----------------------------------------------------------------------------------------------------------------------------------------
+                    const missingIntervals = findIntervalGaps(monthlyTimestamps);
+                    let gapWarningHtml = '';
+                    let isGapDetected = missingIntervals.length > 0;
+
+                    if (isGapDetected) {
+                        // ถ้ามีช่องว่าง ให้เปลี่ยนสถานะและสร้างข้อความเตือน
+                        // สถานะจะถูกกำหนดอีกครั้งด้านล่าง แต่จะเก็บข้อมูลไว้ก่อน
+
+                        // แสดงช่วงเวลาที่หายไป 5 อันแรก (หรือทั้งหมด ถ้ามีน้อยกว่า 5)
+                        const displayGaps = missingIntervals.slice(0, 5);
+                        const gapText = missingIntervals.length > 5 ? `... และอีก ${missingIntervals.length - 5} จุด` : '';
+
+                        gapWarningHtml = `
+                    <p class="interval-gap-warning">
+                        <span style="font-weight: bold; color: #cc0000; font-size: 0.9em;">
+                            พบช่วงเวลาไม่ต่อเนื่อง (${missingIntervals.length} จุด):
+                        </span>
+                        <span style="font-size: 0.85em; display: block; margin-left: -1.5em; color: #555;">
+                            ขาด: ${displayGaps.join(', ')} ${gapText}
+                            <br>
+                        </span>
+                    </p>`;
+
+                        console.warn(`[GAP WARNING] เดือน ${monthName} ${selectedYearInt + 543}: พบช่วงเวลาที่ไม่ต่อเนื่อง:`, missingIntervals);
+                    }
+                    // ----------------------------------------------------------------------------------------------------------------------------------------
+
+
                     // ** Display logic update **
                     const intervalRatio = (expectedIntervalsInBillingPeriod > 0) ? actualIntervals / expectedIntervalsInBillingPeriod : 0;
                     const intervalRatioPercent = customRound(intervalRatio * 100, 2);
 
-                    let dayCountWarning = '';
+                    let dayCountWarning = ''; // ไม่ได้ถูกใช้ในโค้ดที่ให้มา
 
                     // 2. กำหนดสถานะและข้อความเตือนหลัก
                     let statusClass = 'complete';
                     let statusText = '✅';
 
-                    // ถ้า Actual Intervals เท่ากับ Expected Intervals พอดี จะแสดง ✅
-                    if (actualIntervals === expectedIntervalsInBillingPeriod) {
+                    // ถ้ามี Gap ให้สถานะเป็น Anomaly ทันที ไม่ว่า Interval จะครบหรือไม่
+                    if (isGapDetected) {
+                        statusClass = 'anomaly';
+                        statusText = '🚨 (Gap)';
+                    }
+                    // ถ้าไม่มี Gap ให้เช็คจำนวน Interval ตามปกติ
+                    else if (actualIntervals === expectedIntervalsInBillingPeriod) {
                         statusClass = 'complete';
                         statusText = '✅';
                     } else if (intervalRatio < 1) {
@@ -1339,7 +1448,6 @@
                         statusClass = 'warning';
                         statusText = '⚠️';
                     }
-                    // ✅ เพิ่ม: กรณี Interval เกิน (ถ้า Actual Intervals มากกว่า Expected Intervals)
                     else if (intervalRatio > 1) {
                         // กรณีที่ 3: Interval เกิน 
                         statusClass = 'anomaly';
@@ -1356,7 +1464,8 @@
                         dayCount: `${actualDayCount}/${expectedDaysInBillingPeriod}`,
                         dayDifference: actualDayCount - expectedDaysInBillingPeriod,
                         intervalRatioPercent: intervalRatioPercent.toFixed(2),
-                        expectedDays: expectedDaysInBillingPeriod
+                        expectedDays: expectedDaysInBillingPeriod,
+                        hasGap: isGapDetected // 👈 เพิ่มสถานะว่ามี Gap หรือไม่
                     };
 
                     // ----------------------------------------------------------------------------------------------------------------------------------------
@@ -1372,7 +1481,7 @@
                         (${actualDayCount} / ${expectedDaysInBillingPeriod} วัน)
                         <span class="status">${statusText}</span>
                     </span>
-                </li>
+                    ${gapWarningHtml} </li>
             `;
                     // ----------------------------------------------------------------------------------------------------------------------------------------
 
@@ -2229,8 +2338,45 @@
         document.getElementById('exportFullTemplate').addEventListener('click', exportFullTemplate);
         document.getElementById('exportMiniTemplate').addEventListener('click', exportMiniTemplate);
 
+        // =========================================================
+        // 5. Scroll Down Logic (เปลี่ยนปุ่มเป็นสัญลักษณ์)
+        // =========================================================
+        const floatingDropdown = document.querySelector('.floating-dropdown');
+        const scrollThreshold = 50; // กำหนดระยะเลื่อน (เป็นพิกเซล) ที่ต้องการให้เปลี่ยนเป็นสัญลักษณ์
 
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > scrollThreshold) {
+                // เลื่อนลงเกิน threshold, เปลี่ยนเป็นแบบสัญลักษณ์เท่านั้น
+                floatingDropdown.classList.add('scrolled');
+            } else {
+                // อยู่ด้านบน, เปลี่ยนกลับเป็นแบบเต็ม
+                floatingDropdown.classList.remove('scrolled');
+            }
+        });
 
+        // ========================================================= SNOWFLAKE EFFECT
+
+        function createSnowflake() {
+            const snow = document.createElement("div");
+            snow.classList.add("snowflake");
+            snow.textContent = "❄";
+
+            // random position
+            snow.style.left = Math.random() * 100 + "vw";
+            snow.style.fontSize = (Math.random() * 10 + 10) + "px";
+            snow.style.opacity = Math.random();
+            snow.style.animationDuration = (Math.random() * 5 + 5) + "s";
+
+            document.body.appendChild(snow);
+
+            // remove when finished
+            setTimeout(() => {
+                snow.remove();
+            }, 10000);
+        }
+
+        // generate snowflakes
+        setInterval(createSnowflake, 150);
 
     </script>
 </body>

@@ -222,12 +222,12 @@ select {
 }
 
 /* When the real checkbox is checked, show the checkmark and change box style */
-.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-unchecked {
+.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-unchecked {
 	background-color: #e0e0e0;
 	border-color: #28a745;
 }
 
-.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-checked {
+.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-checked {
 	transform: translateY(-50%) scale(1);
 	/* Show the checkmark */
 }
@@ -387,9 +387,7 @@ tbody tr:hover {
 .button {
 	background-color: var(--bg-color);
 	/* สีพื้นหลังเดียวกับพื้นหลัง container */
-	box-shadow: 6px 6px 12px var(--shadow-dark),
-		/* เงาล่างขวาเข้ม (กดแล้วจมลง) */
-		-6px -6px 12px var(--shadow-light);
+	box-shadow: 6px 6px 12px var(--shadow-dark), /* เงาล่างขวาเข้ม (กดแล้วจมลง) */ -6px -6px 12px var(--shadow-light);
 	/* เงาบนซ้ายสว่าง (ยกขึ้น) */
 }
 
@@ -399,9 +397,7 @@ tbody tr:hover {
 	/* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
 	color: #285430;
 	/* สีข้อความเข้มขึ้น */
-	box-shadow: 6px 6px 12px #a7a7a7,
-		/* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */
-		-6px -6px 12px #ffffff;
+	box-shadow: 6px 6px 12px #a7a7a7, /* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */ -6px -6px 12px #ffffff;
 }
 
 /* Hover effect */
@@ -417,9 +413,7 @@ tbody tr:hover {
 #exportExcel:active {
 	background-color: #acd8ae;
 	/* สีเขียวเข้มขึ้นเมื่อถูกกด */
-	box-shadow: inset 2px 2px 5px #a7a7a7,
-		/* เงาด้านใน ให้ดูจมลง */
-		inset -3px -3px 7px #ffffff;
+	box-shadow: inset 2px 2px 5px #a7a7a7, /* เงาด้านใน ให้ดูจมลง */ inset -3px -3px 7px #ffffff;
 	transform: translateY(0);
 	/* กลับมาตำแหน่งเดิม */
 }
@@ -685,7 +679,7 @@ tbody tr:hover {
 
 /* ปุ่มหลัก (คงสไตล์เดิมไว้) */
 .floating-btn {
-	background-color: #0070C0;
+	background-color: #0070c0;
 	color: white;
 	border: none;
 	border-radius: 8px;
@@ -697,7 +691,7 @@ tbody tr:hover {
 }
 
 .floating-btn:hover {
-	background-color: #005A9C;
+	background-color: #005a9c;
 	transform: translateY(-2px);
 }
 
@@ -732,3 +726,68 @@ tbody tr:hover {
 .floating-dropdown:hover .dropdown-content {
 	display: block;
 }
+
+/* Styles สำหรับแยก Icon และ Text (ช่องว่างระหว่าง Icon กับ Text) */
+.floating-btn .btn-icon {
+	margin-right: 5px; /* ช่องว่างระหว่างไอคอนกับข้อความ (ในโหมดปกติ) */
+}
+
+/* ---------------------------------------------------------------- */
+/* Styles เมื่อมีการ Scroll (เปลี่ยนเป็นโหมดสัญลักษณ์เท่านั้น) */
+/* ---------------------------------------------------------------- */
+
+/* 1. เมื่อ div.floating-dropdown มีคลาส .scrolled */
+.floating-dropdown.scrolled .floating-btn {
+	/* ปรับขนาด padding ให้ปุ่มเล็กลง */
+	padding: 10px;
+	/* ให้การเปลี่ยนขนาดดูนุ่มนวล */
+	transition: all 0.3s ease;
+}
+
+.floating-dropdown.scrolled .floating-btn .btn-icon {
+	/* ลบช่องว่างด้านขวาของไอคอนเมื่อเป็นโหมดสัญลักษณ์ */
+	margin-right: 0;
+}
+
+.floating-dropdown.scrolled .floating-btn .btn-text {
+	/* *** จุดสำคัญ: ซ่อนส่วนที่เป็นข้อความ *** */
+	display: none;
+}
+
+/* เพิ่มใน style.css */
+.interval-list li.anomaly {
+	border-left: 5px solid #cc0000; /* สีแดงสำหรับ Anomaly/Gap */
+	padding-left: 10px;
+}
+
+.interval-gap-warning {
+	margin-top: 5px;
+	margin-bottom: 0;
+	padding-left: 1.5em;
+	font-size: 0.9em;
+	line-height: 1.2;
+}
+
+.snowflake {
+	position: fixed;
+	top: -10px;
+	color: white;
+	font-size: 3em;
+	user-select: none;
+	pointer-events: none;
+	animation-name: fall;
+	animation-timing-function: linear;
+}
+
+@keyframes fall {
+	0% {
+		transform: translateY(-10px);
+		opacity: 1;
+	}
+	100% {
+		transform: translateY(100vh);
+		opacity: 0.4;
+	}
+}
+
+
