@@ -222,12 +222,12 @@ select {
 }
 
 /* When the real checkbox is checked, show the checkmark and change box style */
-.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-unchecked {
+.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-unchecked {
 	background-color: #e0e0e0;
 	border-color: #28a745;
 }
 
-.checkbox-group input[type="checkbox"]:checked + .custom-checkbox .icon-checked {
+.checkbox-group input[type="checkbox"]:checked+.custom-checkbox .icon-checked {
 	transform: translateY(-50%) scale(1);
 	/* Show the checkmark */
 }
@@ -387,7 +387,9 @@ tbody tr:hover {
 .button {
 	background-color: var(--bg-color);
 	/* สีพื้นหลังเดียวกับพื้นหลัง container */
-	box-shadow: 6px 6px 12px var(--shadow-dark), /* เงาล่างขวาเข้ม (กดแล้วจมลง) */ -6px -6px 12px var(--shadow-light);
+	box-shadow: 6px 6px 12px var(--shadow-dark),
+		/* เงาล่างขวาเข้ม (กดแล้วจมลง) */
+		-6px -6px 12px var(--shadow-light);
 	/* เงาบนซ้ายสว่าง (ยกขึ้น) */
 }
 
@@ -397,7 +399,9 @@ tbody tr:hover {
 	/* สีเขียวอ่อนสำหรับปุ่ม Export (ปรับให้เข้ากับธีม) */
 	color: #285430;
 	/* สีข้อความเข้มขึ้น */
-	box-shadow: 6px 6px 12px #a7a7a7, /* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */ -6px -6px 12px #ffffff;
+	box-shadow: 6px 6px 12px #a7a7a7,
+		/* ใช้ค่าคงที่สำหรับเงาที่นี่เพื่อให้เห็นความแตกต่างกับ neumorphism โดยรวม */
+		-6px -6px 12px #ffffff;
 }
 
 /* Hover effect */
@@ -413,7 +417,9 @@ tbody tr:hover {
 #exportExcel:active {
 	background-color: #acd8ae;
 	/* สีเขียวเข้มขึ้นเมื่อถูกกด */
-	box-shadow: inset 2px 2px 5px #a7a7a7, /* เงาด้านใน ให้ดูจมลง */ inset -3px -3px 7px #ffffff;
+	box-shadow: inset 2px 2px 5px #a7a7a7,
+		/* เงาด้านใน ให้ดูจมลง */
+		inset -3px -3px 7px #ffffff;
 	transform: translateY(0);
 	/* กลับมาตำแหน่งเดิม */
 }
@@ -729,7 +735,8 @@ tbody tr:hover {
 
 /* Styles สำหรับแยก Icon และ Text (ช่องว่างระหว่าง Icon กับ Text) */
 .floating-btn .btn-icon {
-	margin-right: 5px; /* ช่องว่างระหว่างไอคอนกับข้อความ (ในโหมดปกติ) */
+	margin-right: 5px;
+	/* ช่องว่างระหว่างไอคอนกับข้อความ (ในโหมดปกติ) */
 }
 
 /* ---------------------------------------------------------------- */
@@ -756,7 +763,8 @@ tbody tr:hover {
 
 /* เพิ่มใน style.css */
 .interval-list li.anomaly {
-	border-left: 5px solid #cc0000; /* สีแดงสำหรับ Anomaly/Gap */
+	border-left: 5px solid #cc0000;
+	/* สีแดงสำหรับ Anomaly/Gap */
 	padding-left: 10px;
 }
 
@@ -784,10 +792,53 @@ tbody tr:hover {
 		transform: translateY(-10px);
 		opacity: 1;
 	}
+
 	100% {
 		transform: translateY(100vh);
 		opacity: 0.4;
 	}
 }
 
+/* Loading Overlay */
+.loader-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(255, 255, 255, 0.8);
+	display: none;
+	/* ซ่อนไว้เริ่มต้น */
+	flex-direction: column;
+	justify-content: center;
+	align-items: center;
+	z-index: 9999;
+}
 
+/* ตัว Spinner หมุนๆ */
+.spinner {
+	width: 60px;
+	height: 60px;
+	border: 6px solid #f3f3f3;
+	border-top: 6px solid #3498db;
+	/* สีฟ้า */
+	border-radius: 50%;
+	animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+	0% {
+		transform: rotate(0deg);
+	}
+
+	100% {
+		transform: rotate(360deg);
+	}
+}
+
+.loader-text {
+	margin-top: 15px;
+	font-size: 1.1em;
+	font-weight: bold;
+	color: #333;
+}

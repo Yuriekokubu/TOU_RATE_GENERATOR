@@ -95,6 +95,11 @@
             <canvas id="detailLineChart"></canvas>
         </div>
 
+        <div id="loaderOverlay" class="loader-overlay">
+            <div class="spinner"></div>
+            <div class="loader-text">กำลังประมวลผล...</div>
+        </div>
+
         <div id="output" class="output-section"></div>
     </div>
     <script>
@@ -986,6 +991,31 @@
                 return;
             }
 
+            // --- 1. แสดง Spinner ---
+            const loader = document.getElementById('loaderOverlay');
+            loader.style.display = 'flex';
+
+            // ใช้ setTimeout เพื่อให้ UI ทันได้ Render Spinner
+            setTimeout(async () => {
+                try {
+                    collectHolidays();
+                    const file = excelFileInput.files[0];
+                    if (!file) {
+                        alert("กรุณาเลือกไฟล์ Excel");
+                        loader.style.display = 'none'; // ปิดถ้าไม่มีไฟล์
+                        return;
+                    }
+
+                    // ... (โค้ดเดิมของคุณใน process) ...
+
+                    // เมื่อ reader.onload ทำงานเสร็จสิ้นภายในนั้น 
+                    // อย่าลืมสั่ง loader.style.display = 'none'; ที่บรรทัดสุดท้ายของ onload ด้วยครับ
+                } catch (error) {
+                    console.error(error);
+                    loader.style.display = 'none';
+                }
+            }, 100);
+
             collectHolidays();
             const file = excelFileInput.files[0];
             if (!file) {
@@ -1242,10 +1272,14 @@
 
 
         function updateDisplay() {
-            // ต้องมั่นใจว่า isProcessed ถูกตั้งค่าเป็น true หลังจากประมวลผลไฟล์แล้ว
+            // 1. ตรวจสอบสถานะก่อนเริ่ม ถ้ายังไม่ได้อัพโหลดไฟล์ให้จบการทำงาน
             if (!isProcessed) {
                 return;
             }
+
+            // 2. แสดง Spinner ทันที
+            const loader = document.getElementById('loaderOverlay');
+            if (loader) loader.style.display = 'flex';
 
             const selectedMonthYear = document.getElementById('monthYearSelector').value;
             const selectedArType = document.getElementById('arTypeSelector').value;
@@ -1253,162 +1287,164 @@
             const selectedDataType = document.getElementById('dataTypeSelector').value;
             const applyMultiplier = document.getElementById('applyMultiplier').checked; // ดึงค่าตัวคูณ
 
-            console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}, Data Type: ${selectedDataType}`);
+            setTimeout(() => {
+                try {
+                    console.log(`[updateDisplay] User selected Month/Year: ${selectedMonthYear}, AR Type: ${selectedArType}, Data Type: ${selectedDataType}`);
 
-            const outputDiv = document.getElementById('output');
-            outputDiv.innerHTML = ''; // ล้างเนื้อหาเก่าใน outputDiv
+                    const outputDiv = document.getElementById('output');
+                    outputDiv.innerHTML = ''; // ล้างเนื้อหาเก่าใน outputDiv
 
-            // ต้องมั่นใจว่า calculateAllMonthsSummariesAndMaxes เป็นฟังก์ชันที่ทำงานได้
-            const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
-                calculateAllMonthsSummariesAndMaxes(selectedArType, selectedDataType);
+                    // ต้องมั่นใจว่า calculateAllMonthsSummariesAndMaxes เป็นฟังก์ชันที่ทำงานได้
+                    const { monthlySummaries: calculatedMonthlySummaries, monthlyMaxValues: calculatedMonthlyMaxValues } =
+                        calculateAllMonthsSummariesAndMaxes(selectedArType, selectedDataType);
 
-            // กำหนดค่าให้กับ Global Variables (ถ้ามี)
-            monthlySummaries = calculatedMonthlySummaries;
-            monthlyMaxValues = calculatedMonthlyMaxValues;
+                    // กำหนดค่าให้กับ Global Variables (ถ้ามี)
+                    monthlySummaries = calculatedMonthlySummaries;
+                    monthlyMaxValues = calculatedMonthlyMaxValues;
 
-            // ตารางสรุปรายเดือน (ต้องมั่นใจว่า renderMonthlySummaryTable เป็นฟังก์ชันที่ทำงานได้)
-            outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues, selectedDataType);
+                    // ตารางสรุปรายเดือน (ต้องมั่นใจว่า renderMonthlySummaryTable เป็นฟังก์ชันที่ทำงานได้)
+                    outputDiv.innerHTML += renderMonthlySummaryTable(monthlySummaries, monthlyMaxValues, selectedDataType);
 
-            const summaryBoxWrapper = document.createElement('div');
-            summaryBoxWrapper.className = 'summary-box-wrapper column-layout';
+                    const summaryBoxWrapper = document.createElement('div');
+                    summaryBoxWrapper.className = 'summary-box-wrapper column-layout';
 
-            // -----------------------------------------------------
-            // ส่วนที่ 1: Meter Info และ Multiplier Ranges
-            // -----------------------------------------------------
-            let multiplierInfoHtml = '<p>ข้อมูลตัวคูณ: <strong>N/A</strong></p>';
-            if (globalResults.length > 0) {
-                const multiplierRanges = {};
-                globalResults.forEach(r => {
-                    const multiplier = r.rowMultiplier.toFixed(4);
-                    const datetime = r.datetime;
-                    if (!multiplierRanges[multiplier]) {
-                        multiplierRanges[multiplier] = {
-                            start: datetime,
-                            end: datetime
-                        };
-                    } else {
-                        const currentDt = new Date(datetime);
-                        if (currentDt < new Date(multiplierRanges[multiplier].start)) {
-                            multiplierRanges[multiplier].start = datetime;
-                        }
-                        if (currentDt > new Date(multiplierRanges[multiplier].end)) {
-                            multiplierRanges[multiplier].end = datetime;
-                        }
-                    }
-                });
+                    // -----------------------------------------------------
+                    // ส่วนที่ 1: Meter Info และ Multiplier Ranges
+                    // -----------------------------------------------------
+                    let multiplierInfoHtml = '<p>ข้อมูลตัวคูณ: <strong>N/A</strong></p>';
+                    if (globalResults.length > 0) {
+                        const multiplierRanges = {};
+                        globalResults.forEach(r => {
+                            const multiplier = r.rowMultiplier.toFixed(4);
+                            const datetime = r.datetime;
+                            if (!multiplierRanges[multiplier]) {
+                                multiplierRanges[multiplier] = {
+                                    start: datetime,
+                                    end: datetime
+                                };
+                            } else {
+                                const currentDt = new Date(datetime);
+                                if (currentDt < new Date(multiplierRanges[multiplier].start)) {
+                                    multiplierRanges[multiplier].start = datetime;
+                                }
+                                if (currentDt > new Date(multiplierRanges[multiplier].end)) {
+                                    multiplierRanges[multiplier].end = datetime;
+                                }
+                            }
+                        });
 
-                if (Object.keys(multiplierRanges).length > 0) {
-                    let rangesHtml = '<ul class="multiplier-list">';
-                    for (const mult in multiplierRanges) {
-                        if (multiplierRanges.hasOwnProperty(mult)) {
-                            const range = multiplierRanges[mult];
-                            rangesHtml += `<li><strong>ตัวคูณ ${mult}</strong><br>ตั้งแต่ ${range.start}<br>ถึง ${range.end}</li>`;
-                        }
-                    }
-                    rangesHtml += '</ul>';
-                    multiplierInfoHtml = `<div class="multiplier-info">
+                        if (Object.keys(multiplierRanges).length > 0) {
+                            let rangesHtml = '<ul class="multiplier-list">';
+                            for (const mult in multiplierRanges) {
+                                if (multiplierRanges.hasOwnProperty(mult)) {
+                                    const range = multiplierRanges[mult];
+                                    rangesHtml += `<li><strong>ตัวคูณ ${mult}</strong><br>ตั้งแต่ ${range.start}<br>ถึง ${range.end}</li>`;
+                                }
+                            }
+                            rangesHtml += '</ul>';
+                            multiplierInfoHtml = `<div class="multiplier-info">
                 <p><strong>ข้อมูลตัวคูณ:</strong></p>
                 ${rangesHtml}
             </div>`;
-                }
-            }
+                        }
+                    }
 
-            // ต้องมั่นใจว่า meterNumber เป็น Global Variable
-            const meterInfoHtml = `
+                    // ต้องมั่นใจว่า meterNumber เป็น Global Variable
+                    const meterInfoHtml = `
         <div class="summary-box meter-info">
             <h3>สรุปข้อมูลมิเตอร์และการใช้พลังงาน</h3>
             <p>หมายเลขมิเตอร์: <strong>${meterNumber || 'N/A'}</strong></p>
             ${multiplierInfoHtml}
         </div>`;
-            summaryBoxWrapper.innerHTML += meterInfoHtml;
+                    summaryBoxWrapper.innerHTML += meterInfoHtml;
 
-            // -----------------------------------------------------
-            // ส่วนที่ 2: Interval Check (ส่วนที่มีการแก้ไข)
-            // -----------------------------------------------------
+                    // -----------------------------------------------------
+                    // ส่วนที่ 2: Interval Check (ส่วนที่มีการแก้ไข)
+                    // -----------------------------------------------------
 
-            const billingPeriodInfoDiv = document.createElement('div');
-            billingPeriodInfoDiv.className = 'summary-box billing-period-info';
-            billingPeriodInfoDiv.innerHTML = '<h3>ข้อมูล Interval</h3>';
+                    const billingPeriodInfoDiv = document.createElement('div');
+                    billingPeriodInfoDiv.className = 'summary-box billing-period-info';
+                    billingPeriodInfoDiv.innerHTML = '<h3>ข้อมูล Interval</h3>';
 
-            const uniqueMonthYears = new Set();
-            globalResults.forEach(r => {
-                const { year, month } = getBKKTimeComponents(r.dateObject);
-                uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`);
-            });
-
-            const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
-            const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
-
-            const newMonthlyIntervalDataForExport = {};
-
-            if (sortedUniqueMonthYears.length > 0) {
-                let intervalListHtml = '<ul class="interval-list">';
-
-                sortedUniqueMonthYears.forEach(monthKey => {
-                    const [yearStr, monthStr] = monthKey.split('-');
-                    const selectedMonthInt = parseInt(monthStr); // 1-12
-                    const selectedYearInt = parseInt(yearStr);
-                    const monthName = monthNames[selectedMonthInt - 1];
-
-                    // --- BILLING PERIOD CALCULATION (Expected Intervals) ---
-                    const numDaysInMonth = getDaysInMonth(selectedYearInt, selectedMonthInt);
-
-                    const { startDate, endDate } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
-
-                    let expectedIntervalsInBillingPeriod = 0;
-                    let expectedDaysInBillingPeriod = 0;
-                    let billingPeriodLabel = `${numDaysInMonth} วันในเดือนปฏิทิน`;
-
-                    if (startDate && endDate) {
-                        const totalIntervalsMs = endDate.getTime() - startDate.getTime();
-
-                        // 1. คำนวณจำนวนวันในรอบบิล: ใช้ Math.round เพื่อให้ได้จำนวนวันเต็มที่ถูกต้อง
-                        expectedDaysInBillingPeriod = Math.round(totalIntervalsMs / 86400000);
-
-                        // 2. สูตร: นำจำนวนวันมาคูณ 96 โดยตรง
-                        expectedIntervalsInBillingPeriod = expectedDaysInBillingPeriod * 96;
-
-                        const startBkk = getBKKTimeComponents(startDate);
-                        const endBkk = getBKKTimeComponents(endDate);
-
-                        billingPeriodLabel = `${expectedDaysInBillingPeriod} วันในรอบบิล (อ่านจาก ${startBkk.day}/${startBkk.month + 1}/${startBkk.year + 543} ถึง ${endBkk.day}/${endBkk.month + 1}/${endBkk.year + 543})`;
-                    } else {
-                        expectedDaysInBillingPeriod = numDaysInMonth;
-                        expectedIntervalsInBillingPeriod = numDaysInMonth * 96;
-                    }
-                    // --- END BILLING PERIOD CALCULATION ---
-
-                    // ** นับ Actual Interval (Actual Row Count) และ Day Count **
-                    let actualIntervals = 0; // นี่คือตัวแปรสำหรับ Actual Row Count
-                    let monthlyTimestamps = []; // 👈 [NEW] Array สำหรับเก็บ Timestamp ในเดือนนี้
-
+                    const uniqueMonthYears = new Set();
                     globalResults.forEach(r => {
-                        // *** การแก้ไขที่สำคัญ: เปลี่ยน < เป็น <= เพื่อรวมแถวสุดท้าย ***
-                        if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
-                            actualIntervals++; // 👈 การนับจำนวนแถวข้อมูลจริง
-                            monthlyTimestamps.push(r.datetime); // 👈 [NEW] เก็บ Timestamp ที่อยู่ในช่วงบิล
-                        }
+                        const { year, month } = getBKKTimeComponents(r.dateObject);
+                        uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`);
                     });
 
-                    // ✅ แก้ไข: คำนวณ Actual Day Count จาก Actual Intervals
-                    const actualDayCount = Math.floor(actualIntervals / 96); // 👈 การแก้ไขหลัก: หาร Interval ด้วย 96 แล้วปัดเศษลง
+                    const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
+                    const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
-                    // 💡 [NEW] ตรวจสอบช่วงเวลาที่หายไป/ไม่ต่อเนื่อง
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
-                    const missingIntervals = findIntervalGaps(monthlyTimestamps);
-                    let gapWarningHtml = '';
-                    let isGapDetected = missingIntervals.length > 0;
+                    const newMonthlyIntervalDataForExport = {};
 
-                    if (isGapDetected) {
-                        // ถ้ามีช่องว่าง ให้เปลี่ยนสถานะและสร้างข้อความเตือน
-                        // สถานะจะถูกกำหนดอีกครั้งด้านล่าง แต่จะเก็บข้อมูลไว้ก่อน
+                    if (sortedUniqueMonthYears.length > 0) {
+                        let intervalListHtml = '<ul class="interval-list">';
 
-                        // แสดงช่วงเวลาที่หายไป 5 อันแรก (หรือทั้งหมด ถ้ามีน้อยกว่า 5)
-                        const displayGaps = missingIntervals.slice(0, 5);
-                        const gapText = missingIntervals.length > 5 ? `... และอีก ${missingIntervals.length - 5} จุด` : '';
+                        sortedUniqueMonthYears.forEach(monthKey => {
+                            const [yearStr, monthStr] = monthKey.split('-');
+                            const selectedMonthInt = parseInt(monthStr); // 1-12
+                            const selectedYearInt = parseInt(yearStr);
+                            const monthName = monthNames[selectedMonthInt - 1];
 
-                        gapWarningHtml = `
+                            // --- BILLING PERIOD CALCULATION (Expected Intervals) ---
+                            const numDaysInMonth = getDaysInMonth(selectedYearInt, selectedMonthInt);
+
+                            const { startDate, endDate } = getBillingPeriodDates(selectedYearInt, selectedMonthInt, selectedArType);
+
+                            let expectedIntervalsInBillingPeriod = 0;
+                            let expectedDaysInBillingPeriod = 0;
+                            let billingPeriodLabel = `${numDaysInMonth} วันในเดือนปฏิทิน`;
+
+                            if (startDate && endDate) {
+                                const totalIntervalsMs = endDate.getTime() - startDate.getTime();
+
+                                // 1. คำนวณจำนวนวันในรอบบิล: ใช้ Math.round เพื่อให้ได้จำนวนวันเต็มที่ถูกต้อง
+                                expectedDaysInBillingPeriod = Math.round(totalIntervalsMs / 86400000);
+
+                                // 2. สูตร: นำจำนวนวันมาคูณ 96 โดยตรง
+                                expectedIntervalsInBillingPeriod = expectedDaysInBillingPeriod * 96;
+
+                                const startBkk = getBKKTimeComponents(startDate);
+                                const endBkk = getBKKTimeComponents(endDate);
+
+                                billingPeriodLabel = `${expectedDaysInBillingPeriod} วันในรอบบิล (อ่านจาก ${startBkk.day}/${startBkk.month + 1}/${startBkk.year + 543} ถึง ${endBkk.day}/${endBkk.month + 1}/${endBkk.year + 543})`;
+                            } else {
+                                expectedDaysInBillingPeriod = numDaysInMonth;
+                                expectedIntervalsInBillingPeriod = numDaysInMonth * 96;
+                            }
+                            // --- END BILLING PERIOD CALCULATION ---
+
+                            // ** นับ Actual Interval (Actual Row Count) และ Day Count **
+                            let actualIntervals = 0; // นี่คือตัวแปรสำหรับ Actual Row Count
+                            let monthlyTimestamps = []; // 👈 [NEW] Array สำหรับเก็บ Timestamp ในเดือนนี้
+
+                            globalResults.forEach(r => {
+                                // *** การแก้ไขที่สำคัญ: เปลี่ยน < เป็น <= เพื่อรวมแถวสุดท้าย ***
+                                if (startDate && endDate && r.dateObject.getTime() >= startDate.getTime() && r.dateObject.getTime() <= endDate.getTime()) {
+                                    actualIntervals++; // 👈 การนับจำนวนแถวข้อมูลจริง
+                                    monthlyTimestamps.push(r.datetime); // 👈 [NEW] เก็บ Timestamp ที่อยู่ในช่วงบิล
+                                }
+                            });
+
+                            // ✅ แก้ไข: คำนวณ Actual Day Count จาก Actual Intervals
+                            const actualDayCount = Math.floor(actualIntervals / 96); // 👈 การแก้ไขหลัก: หาร Interval ด้วย 96 แล้วปัดเศษลง
+
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
+                            // 💡 [NEW] ตรวจสอบช่วงเวลาที่หายไป/ไม่ต่อเนื่อง
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
+                            const missingIntervals = findIntervalGaps(monthlyTimestamps);
+                            let gapWarningHtml = '';
+                            let isGapDetected = missingIntervals.length > 0;
+
+                            if (isGapDetected) {
+                                // ถ้ามีช่องว่าง ให้เปลี่ยนสถานะและสร้างข้อความเตือน
+                                // สถานะจะถูกกำหนดอีกครั้งด้านล่าง แต่จะเก็บข้อมูลไว้ก่อน
+
+                                // แสดงช่วงเวลาที่หายไป 5 อันแรก (หรือทั้งหมด ถ้ามีน้อยกว่า 5)
+                                const displayGaps = missingIntervals.slice(0, 5);
+                                const gapText = missingIntervals.length > 5 ? `... และอีก ${missingIntervals.length - 5} จุด` : '';
+
+                                gapWarningHtml = `
                     <p class="interval-gap-warning">
                         <span style="font-weight: bold; color: #cc0000; font-size: 0.9em;">
                             พบช่วงเวลาไม่ต่อเนื่อง (${missingIntervals.length} จุด):
@@ -1419,59 +1455,59 @@
                         </span>
                     </p>`;
 
-                        console.warn(`[GAP WARNING] เดือน ${monthName} ${selectedYearInt + 543}: พบช่วงเวลาที่ไม่ต่อเนื่อง:`, missingIntervals);
-                    }
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
+                                console.warn(`[GAP WARNING] เดือน ${monthName} ${selectedYearInt + 543}: พบช่วงเวลาที่ไม่ต่อเนื่อง:`, missingIntervals);
+                            }
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
 
 
-                    // ** Display logic update **
-                    const intervalRatio = (expectedIntervalsInBillingPeriod > 0) ? actualIntervals / expectedIntervalsInBillingPeriod : 0;
-                    const intervalRatioPercent = customRound(intervalRatio * 100, 2);
+                            // ** Display logic update **
+                            const intervalRatio = (expectedIntervalsInBillingPeriod > 0) ? actualIntervals / expectedIntervalsInBillingPeriod : 0;
+                            const intervalRatioPercent = customRound(intervalRatio * 100, 2);
 
-                    let dayCountWarning = ''; // ไม่ได้ถูกใช้ในโค้ดที่ให้มา
+                            let dayCountWarning = ''; // ไม่ได้ถูกใช้ในโค้ดที่ให้มา
 
-                    // 2. กำหนดสถานะและข้อความเตือนหลัก
-                    let statusClass = 'complete';
-                    let statusText = '✅';
+                            // 2. กำหนดสถานะและข้อความเตือนหลัก
+                            let statusClass = 'complete';
+                            let statusText = '✅';
 
-                    // ถ้ามี Gap ให้สถานะเป็น Anomaly ทันที ไม่ว่า Interval จะครบหรือไม่
-                    if (isGapDetected) {
-                        statusClass = 'anomaly';
-                        statusText = '🚨 (Gap)';
-                    }
-                    // ถ้าไม่มี Gap ให้เช็คจำนวน Interval ตามปกติ
-                    else if (actualIntervals === expectedIntervalsInBillingPeriod) {
-                        statusClass = 'complete';
-                        statusText = '✅';
-                    } else if (intervalRatio < 1) {
-                        // กรณีที่ 1: Interval ขาด
-                        statusClass = 'warning';
-                        statusText = '⚠️';
-                    }
-                    else if (intervalRatio > 1) {
-                        // กรณีที่ 3: Interval เกิน 
-                        statusClass = 'anomaly';
-                        statusText = '🚨';
-                    }
+                            // ถ้ามี Gap ให้สถานะเป็น Anomaly ทันที ไม่ว่า Interval จะครบหรือไม่
+                            if (isGapDetected) {
+                                statusClass = 'anomaly';
+                                statusText = '🚨 (Gap)';
+                            }
+                            // ถ้าไม่มี Gap ให้เช็คจำนวน Interval ตามปกติ
+                            else if (actualIntervals === expectedIntervalsInBillingPeriod) {
+                                statusClass = 'complete';
+                                statusText = '✅';
+                            } else if (intervalRatio < 1) {
+                                // กรณีที่ 1: Interval ขาด
+                                statusClass = 'warning';
+                                statusText = '⚠️';
+                            }
+                            else if (intervalRatio > 1) {
+                                // กรณีที่ 3: Interval เกิน 
+                                statusClass = 'anomaly';
+                                statusText = '🚨';
+                            }
 
-                    // ** ใช้ฟังก์ชัน formatIntervals() ที่สร้างไว้ก่อนหน้า **
-                    const formattedTime = formatIntervals(actualIntervals);
+                            // ** ใช้ฟังก์ชัน formatIntervals() ที่สร้างไว้ก่อนหน้า **
+                            const formattedTime = formatIntervals(actualIntervals);
 
-                    // ** กำหนดค่าให้กับ Object ชั่วคราว **
-                    newMonthlyIntervalDataForExport[monthKey] = {
-                        interval: `${actualIntervals}/${expectedIntervalsInBillingPeriod}`,
-                        // ✅ แก้ไข: ใช้ actualDayCount ที่คำนวณใหม่ในการส่งออก
-                        dayCount: `${actualDayCount}/${expectedDaysInBillingPeriod}`,
-                        dayDifference: actualDayCount - expectedDaysInBillingPeriod,
-                        intervalRatioPercent: intervalRatioPercent.toFixed(2),
-                        expectedDays: expectedDaysInBillingPeriod,
-                        hasGap: isGapDetected // 👈 เพิ่มสถานะว่ามี Gap หรือไม่
-                    };
+                            // ** กำหนดค่าให้กับ Object ชั่วคราว **
+                            newMonthlyIntervalDataForExport[monthKey] = {
+                                interval: `${actualIntervals}/${expectedIntervalsInBillingPeriod}`,
+                                // ✅ แก้ไข: ใช้ actualDayCount ที่คำนวณใหม่ในการส่งออก
+                                dayCount: `${actualDayCount}/${expectedDaysInBillingPeriod}`,
+                                dayDifference: actualDayCount - expectedDaysInBillingPeriod,
+                                intervalRatioPercent: intervalRatioPercent.toFixed(2),
+                                expectedDays: expectedDaysInBillingPeriod,
+                                hasGap: isGapDetected // 👈 เพิ่มสถานะว่ามี Gap หรือไม่
+                            };
 
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
-                    // ✅ การแก้ไขเพื่อแสดงผลตามที่ผู้ใช้ต้องการ: ขึ้นบรรทัดใหม่ และจัดรูปแบบ 
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
-                    intervalListHtml += `
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
+                            // ✅ การแก้ไขเพื่อแสดงผลตามที่ผู้ใช้ต้องการ: ขึ้นบรรทัดใหม่ และจัดรูปแบบ 
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
+                            intervalListHtml += `
                 <li class="${statusClass}">
                     <span style="font-weight: bold;">• เดือน ${monthName} ${selectedYearInt + 543}:</span> 
                     <span class="count">${formattedTime}</span>
@@ -1483,62 +1519,62 @@
                     </span>
                     ${gapWarningHtml} </li>
             `;
-                    // ----------------------------------------------------------------------------------------------------------------------------------------
+                            // ----------------------------------------------------------------------------------------------------------------------------------------
 
-                });
+                        });
 
-                intervalListHtml += '</ul>';
-                billingPeriodInfoDiv.innerHTML += intervalListHtml;
+                        intervalListHtml += '</ul>';
+                        billingPeriodInfoDiv.innerHTML += intervalListHtml;
 
-                monthlyIntervalDataForExport = newMonthlyIntervalDataForExport;
-            } else {
-                billingPeriodInfoDiv.innerHTML += `<p>ไม่พบข้อมูล Interval ในไฟล์</p>`;
-                monthlyIntervalDataForExport = {};
-            }
-            summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
-
-
-            // -----------------------------------------------------
-            // ส่วนที่ 3: Consumption Summary (ไม่มีการเปลี่ยนแปลง)
-            // -----------------------------------------------------
-            const consumptionSummaryDiv = document.createElement('div');
-            consumptionSummaryDiv.className = 'summary-box consumption-summary';
-            let displayPeakWh = 0, displayPeakVarh = 0;
-            let displayOffPeakWh = 0, displayOffPeakVarh = 0;
-            let displayHolidayWh = 0, displayHolidayVarh = 0;
-            let displayTotalWh = 0, displayTotalVarh = 0;
-            const decimalPlacesForSummary = 2;
-
-            if (selectedMonthYear !== 'all' && monthlySummaries[selectedMonthYear]) {
-                const selectedMonthSummary = monthlySummaries[selectedMonthYear];
-                displayPeakWh = selectedMonthSummary['Peak'].wh / 1000;
-                displayPeakVarh = selectedMonthSummary['Peak'].varh / 1000;
-                displayOffPeakWh = selectedMonthSummary['Off-peak'].wh / 1000;
-                displayOffPeakVarh = selectedMonthSummary['Off-peak'].varh / 1000;
-                displayHolidayWh = selectedMonthSummary['Holiday'].wh / 1000;
-                displayHolidayVarh = selectedMonthSummary['Holiday'].varh / 1000;
-
-                displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
-                displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
-            } else if (selectedMonthYear === 'all') {
-                for (const monthKey in monthlySummaries) {
-                    if (monthlySummaries.hasOwnProperty(monthKey)) {
-                        const monthSummary = monthlySummaries[monthKey];
-                        displayPeakWh += monthSummary['Peak'].wh / 1000;
-                        displayPeakVarh += monthSummary['Peak'].varh / 1000;
-                        displayOffPeakWh += monthSummary['Off-peak'].wh / 1000;
-                        displayOffPeakVarh += monthSummary['Off-peak'].varh / 1000;
-                        displayHolidayWh += monthSummary['Holiday'].wh / 1000;
-                        displayHolidayVarh += monthSummary['Holiday'].varh / 1000;
+                        monthlyIntervalDataForExport = newMonthlyIntervalDataForExport;
+                    } else {
+                        billingPeriodInfoDiv.innerHTML += `<p>ไม่พบข้อมูล Interval ในไฟล์</p>`;
+                        monthlyIntervalDataForExport = {};
                     }
-                }
-                displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
-                displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
-            }
+                    summaryBoxWrapper.appendChild(billingPeriodInfoDiv);
 
-            const whTitle = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
 
-            consumptionSummaryDiv.innerHTML = `
+                    // -----------------------------------------------------
+                    // ส่วนที่ 3: Consumption Summary (ไม่มีการเปลี่ยนแปลง)
+                    // -----------------------------------------------------
+                    const consumptionSummaryDiv = document.createElement('div');
+                    consumptionSummaryDiv.className = 'summary-box consumption-summary';
+                    let displayPeakWh = 0, displayPeakVarh = 0;
+                    let displayOffPeakWh = 0, displayOffPeakVarh = 0;
+                    let displayHolidayWh = 0, displayHolidayVarh = 0;
+                    let displayTotalWh = 0, displayTotalVarh = 0;
+                    const decimalPlacesForSummary = 2;
+
+                    if (selectedMonthYear !== 'all' && monthlySummaries[selectedMonthYear]) {
+                        const selectedMonthSummary = monthlySummaries[selectedMonthYear];
+                        displayPeakWh = selectedMonthSummary['Peak'].wh / 1000;
+                        displayPeakVarh = selectedMonthSummary['Peak'].varh / 1000;
+                        displayOffPeakWh = selectedMonthSummary['Off-peak'].wh / 1000;
+                        displayOffPeakVarh = selectedMonthSummary['Off-peak'].varh / 1000;
+                        displayHolidayWh = selectedMonthSummary['Holiday'].wh / 1000;
+                        displayHolidayVarh = selectedMonthSummary['Holiday'].varh / 1000;
+
+                        displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                        displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+                    } else if (selectedMonthYear === 'all') {
+                        for (const monthKey in monthlySummaries) {
+                            if (monthlySummaries.hasOwnProperty(monthKey)) {
+                                const monthSummary = monthlySummaries[monthKey];
+                                displayPeakWh += monthSummary['Peak'].wh / 1000;
+                                displayPeakVarh += monthSummary['Peak'].varh / 1000;
+                                displayOffPeakWh += monthSummary['Off-peak'].wh / 1000;
+                                displayOffPeakVarh += monthSummary['Off-peak'].varh / 1000;
+                                displayHolidayWh += monthSummary['Holiday'].wh / 1000;
+                                displayHolidayVarh += monthSummary['Holiday'].varh / 1000;
+                            }
+                        }
+                        displayTotalWh = displayPeakWh + displayOffPeakWh + displayHolidayWh;
+                        displayTotalVarh = displayPeakVarh + displayOffPeakVarh + displayHolidayVarh;
+                    }
+
+                    const whTitle = selectedDataType === 'wh_import' ? 'kWh (Import)' : 'kWh (Export)';
+
+                    consumptionSummaryDiv.innerHTML = `
         <h3>สรุปการใช้พลังงาน (รวม)</h3>
         <div class="summary-list">
             <div class="summary-list-item peak-row">
@@ -1560,17 +1596,25 @@
         </div>
     `;
 
-            summaryBoxWrapper.appendChild(consumptionSummaryDiv);
+                    summaryBoxWrapper.appendChild(consumptionSummaryDiv);
 
-            outputDiv.appendChild(summaryBoxWrapper);
+                    outputDiv.appendChild(summaryBoxWrapper);
 
-            // แสดงตารางรายละเอียด 15 นาที
-            outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType, selectedDataType, applyMultiplier);
+                    // แสดงตารางรายละเอียด 15 นาที
+                    outputDiv.innerHTML += renderResultsAsHtml(selectedUnit, selectedMonthYear, selectedArType, selectedDataType, applyMultiplier);
 
-            updateExportButtonVisibility();
+                    updateExportButtonVisibility();
 
-            // วาดกราฟ 
-            updateCharts();
+                    // วาดกราฟ 
+                    updateCharts();
+
+                    // --- 2. ปิด Spinner เมื่อทำงานเสร็จ ---
+                    loader.style.display = 'none';
+                } catch (e) {
+                    console.error(e);
+                    loader.style.display = 'none';
+                }
+            }, 50);
         }
 
         // *****************************************************************
