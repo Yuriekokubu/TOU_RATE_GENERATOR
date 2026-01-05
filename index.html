@@ -14,6 +14,7 @@
     <script src="./holiday_results/holiday_2023.js"></script>
     <script src="./holiday_results/holiday_2024.js"></script>
     <script src="./holiday_results/holiday_2025.js"></script>
+    <script src="./holiday_results/holiday_2026.js"></script>
 </head>
 
 <body>
@@ -228,7 +229,8 @@
                 typeof holiday_2022 !== 'undefined' ? holiday_2022 : null,
                 typeof holiday_2023 !== 'undefined' ? holiday_2023 : null,
                 typeof holiday_2024 !== 'undefined' ? holiday_2024 : null,
-                typeof holiday_2025 !== 'undefined' ? holiday_2025 : null
+                typeof holiday_2025 !== 'undefined' ? holiday_2025 : null,
+                typeof holiday_2026 !== 'undefined' ? holiday_2026 : null
             ];
             allHolidayVars.forEach(data => {
                 if (!data || !data.data) return;
