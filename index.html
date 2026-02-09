@@ -330,6 +330,7 @@
                 billingPeriodEndDate = getBKKMidnightUTCAdjusted(nextMonthYear, nextMonth - 1, 1);
 
             } else {
+                // --- ส่วนที่ปรับปรุงสำหรับ AR1, AR6 ---
                 let prevReadingMonth = targetMonth - 1;
                 let prevReadingYear = targetYear;
                 if (prevReadingMonth === 0) {
@@ -338,26 +339,24 @@
                 }
 
                 const prevReadingDay = getReadingDay(prevReadingYear, prevReadingMonth, arType);
-                if (prevReadingDay === -1) {
-                    return false;
-                }
+                if (prevReadingDay === -1) return false;
 
+                // วันเริ่มรอบบิล: วันที่จดหน่วยของเดือนก่อน + 15 นาที (เริ่ม 00:15)
                 billingPeriodStartDate = getBKKMidnightUTCAdjusted(prevReadingYear, prevReadingMonth - 1, prevReadingDay);
                 billingPeriodStartDate.setMinutes(billingPeriodStartDate.getMinutes() + 15);
 
                 const currentReadingDay = getReadingDay(targetYear, targetMonth, arType);
-                if (currentReadingDay === -1) {
-                    return false;
-                }
+                if (currentReadingDay === -1) return false;
 
+                // วันสิ้นสุดรอบบิล: วันที่จดหน่วยของเดือนนี้ เวลา 24:00 (หรือ 00:00 ของวันถัดไป)
                 let thisMonthReadingDate = getBKKMidnightUTCAdjusted(targetYear, targetMonth - 1, currentReadingDay);
                 billingPeriodEndDate = new Date(thisMonthReadingDate.getTime());
-                billingPeriodEndDate.setUTCHours(0);
-                billingPeriodEndDate.setUTCMinutes(0);
-                billingPeriodEndDate.setUTCSeconds(0);
+                billingPeriodEndDate.setHours(23, 59, 59, 999); // ตั้งให้ครอบคลุมถึงวินาทีสุดท้ายของวันจดหน่วย
             }
-            // console.log(`Checking date: ${dateObject.toISOString()} against period: ${billingPeriodStartDate.toISOString()} to ${billingPeriodEndDate.toISOString()}`);
-            return dateObject.getTime() >= billingPeriodStartDate.getTime() && dateObject.getTime() <= billingPeriodEndDate.getTime();
+
+            // ตรวจสอบว่าเวลาของข้อมูลอยู่ในช่วงเริ่มและจบของรอบบิลหรือไม่
+            return dateObject.getTime() >= billingPeriodStartDate.getTime() &&
+                dateObject.getTime() <= billingPeriodEndDate.getTime();
         }
 
         function sortTable(columnIndex) {
@@ -491,11 +490,24 @@
             const decimalPlacesForKwSummary = 3;
 
             // First, determine all unique billing months present in the data for the selected AR type
+            // --- แก้ไขเป็นแบบนี้ ---
+            // ค้นหาบรรทัดที่มีการสร้าง uniqueBillingMonthYears
             const uniqueBillingMonthYears = new Set();
             globalResults.forEach(r => {
                 const bkkComponents = getBKKTimeComponents(r.dateObject);
-                const calendarMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
-                uniqueBillingMonthYears.add(calendarMonthKey);
+
+                // 1. เก็บเดือนตามปฏิทินปกติ (ตุลาคม)
+                const currentMonthKey = `${bkkComponents.year}-${(bkkComponents.month + 1).toString().padStart(2, '0')}`;
+                uniqueBillingMonthYears.add(currentMonthKey);
+
+                // 2. *** ส่วนที่ต้องเพิ่ม ***
+                // ถ้าเป็นวันที่ 29 ต.ค. เป็นต้นไป (สำหรับ AR6) ให้สร้างเดือนถัดไป (พฤศจิกายน) รอไว้เลย
+                if (bkkComponents.day >= 28) {
+                    let nextM = bkkComponents.month + 2;
+                    let nextY = bkkComponents.year;
+                    if (nextM > 12) { nextM = 1; nextY++; }
+                    uniqueBillingMonthYears.add(`${nextY}-${nextM.toString().padStart(2, '0')}`);
+                }
             });
 
             Array.from(uniqueBillingMonthYears).sort().forEach(monthKey => {
@@ -1370,10 +1382,20 @@
 
                     const uniqueMonthYears = new Set();
                     globalResults.forEach(r => {
-                        const { year, month } = getBKKTimeComponents(r.dateObject);
+                        // 1. เก็บเดือนปกติ
+                        const { year, month, day } = getBKKTimeComponents(r.dateObject);
                         uniqueMonthYears.add(`${year}-${(month + 1).toString().padStart(2, '0')}`);
+
+                        // 2. เพิ่มตรรกะสำหรับ AR6: ถ้าเจอวันที่ 29 ต.ค. ให้สร้าง "พฤศจิกายน" รอไว้เลย
+                        if (selectedArType === 'AR6' && day >= 28) {
+                            let nextM = month + 2; // +1 สำหรับ 1-indexed, +1 สำหรับเดือนถัดไป
+                            let nextY = year;
+                            if (nextM > 12) { nextM = 1; nextY++; }
+                            uniqueMonthYears.add(`${nextY}-${nextM.toString().padStart(2, '0')}`);
+                        }
                     });
 
+                    // ส่วนที่เหลือ (การจัดเรียงและการสร้าง HTML) จะทำงานต่อได้ทันที
                     const sortedUniqueMonthYears = Array.from(uniqueMonthYears).sort();
                     const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
 
